@@ -1026,8 +1026,6 @@ def get_CO2_scenario(scenario, times):
 
     CO2_data_years = data[:,0]
     CO2_data = data[:,scenarios[scenario]]
-    print(len(CO2_data_years))
-    print(len(CO2_data))
 
     if scenario != 'none':
         # interpolate for times of interest

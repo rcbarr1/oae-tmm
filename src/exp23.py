@@ -539,7 +539,7 @@ def run_experiment(experiment):
             # from this offset, calculate rate at which AT must be applied
             # q(t) = AT_to_offset / dt [µmol AT kg-1 yr-1]
             del_q_CDR_AT = AT_to_offset / dt[idx]
-            del_q_CDR_AT = p2.flatten(q_AT_locations_mask, ocnmask) / dt[idx] # just do 1 µmol kg-1 yr-1 in every ML grid cell
+            
     
             # add in source/sink vectors for ∆AT to q vector
             q[(m+1):(2*m+1)] = del_q_CDR_AT

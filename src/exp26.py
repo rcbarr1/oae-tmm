@@ -607,42 +607,72 @@ def run_experiment(experiment):
     
     if ds is not None: ds.close()
 
+def parse_exp_ids(values):
+    """Expand experiment IDs and ranges like 1-5 into a sorted list."""
+    exp_ids = set()
+
+    for v in values:
+        if '-' in v:
+            start, end = map(int, v.split('-'))
+            exp_ids.update(range(start, end + 1))
+        else:
+            exp_ids.add(int(v))
+
+    return sorted(exp_ids)
+
 def main():
     # parse function call (from command line)
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exp-id', type=int,
-                       help='experiment ID (0 to N-1)')
+    parser.add_argument('--exp-id', nargs='+',
+                        help='experiment ID(s), i.e. 0 3 5-10')
     parser.add_argument('--list', action='store_true',
-                       help='list all experiments and exit')
+                        help='list all experiments and exit')
     parser.add_argument('--test', action='store_true',
-                       help='use quick test experiments instead of full set')
+                        help='use test experiment instead of full experiment')
     args = parser.parse_args()
-    
+
     # get all experiment configurations
     test = False
     if args.test:
         test = True
     experiments = set_experiment_parameters(test)
-    
+
     # handle --list option
     if args.list:
         print(f"total experiments: {len(experiments)}")
         for i, experiment in enumerate(experiments):
-            print(f"  {i}: exp26_{experiment['tag']}")
+            print(f"  {i}: exp25_{experiment['tag']}")
         return
-    
-    # validate exp_id
-    if not test:
-        if args.exp_id < 0 or args.exp_id >= len(experiments):
-            print(f"ERROR: exp-id must be between 0 and {len(experiments)-1}")
-            print(f"use --list to see all experiments")
+
+    # handle test mode (runs first experiment only)
+    if test:
+        experiment = experiments[0]
+        print(f"running test experiment: LCA1_{experiment['tag']}")
+        run_experiment(experiment)
+        return
+
+    # require exp-id when not using test
+    if args.exp_id is None:
+        print("ERROR: you must specify --exp-id")
+        print("use --list to see available experiments")
+        return
+
+    # parse experiment IDs and ranges
+    exp_ids = parse_exp_ids(args.exp_id)
+
+    # validate experiment IDs
+    for exp_id in exp_ids:
+        if exp_id < 0 or exp_id >= len(experiments):
+            print(f"ERROR: exp-id {exp_id} must be between 0 and {len(experiments)-1}")
+            print("use --list to see all experiments")
             return
-    
-    # run the specified experiment
-    if not test: experiment = experiments[args.exp_id]
-    else: experiment = experiments[0]
-    run_experiment(experiment)
-    
+
+    # run experiments
+    for exp_id in exp_ids:
+        experiment = experiments[exp_id]
+        print(f"running experiment {exp_id}: exp26_{experiment['tag']}")
+        run_experiment(experiment)
+
 # run main function
 if __name__ == '__main__':
     main()
