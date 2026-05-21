@@ -19,8 +19,8 @@ from tqdm import tqdm
 
 # load model architecture
 data_path = '/Users/Reese_1/Documents/Research Projects/project2/data/'
-output_path = '/Users/Reese_1/Documents/Research Projects/project2/outputs/'
-# output_path = '/Volumes/LaCie/outputs/'
+# output_path = '/Users/Reese_1/Documents/Research Projects/project2/outputs/'
+output_path = '/Volumes/LaCie/outputs/'
 
 # load transport matrix (OCIM2-48L, from Holzer et al., 2021)
 # transport matrix is referred to as "A" vector in John et al., 2020 (AWESOME OCIM)
@@ -638,6 +638,125 @@ ax.spines['bottom'].set_color(textcolor)
 ax.spines['top'].set_color(textcolor)
 ax.spines['left'].set_color(textcolor)
 ax.spines['right'].set_color(textcolor)
+
+#%% change in revelle factors
+# plot RF in 2030 and 2080 for all four scenarios at surface and in ocean basins: Atlantic (25.5°W), Pacific (150.5ºW), and Indian (90.5°E)
+# plot difference in RF between 2080 and 2030 for all four scenarios and in ocean basins
+
+# Canth_all_scenarios = np.load(output_path + 'Canth_all_scenarios_calculated_2030-2080.npy')
+
+# get preindustrial baselines for DIC & AT
+DIC_preind_ds = xr.DataArray(DIC_preind_3D, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+AT_ds = xr.DataArray(AT_3D, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+
+# make array to store output values in
+# num experiments x num time steps of interest x length of flattened ocnmask
+t_idxs = [0, -1]
+revelle_factors = np.zeros((len(experiment_names), len(t_idxs), len(S)))
+
+# use xarray to open metadata of files of interest
+for exp_idx in range(len(experiment_names)):
+    ds = xr.open_mfdataset(
+        output_path + experiment_names[exp_idx] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True)
+    
+    # convert ∆AT to AT
+    AT_modeled_3D = ds['delAT'] + AT_ds
+
+    for t_idx in t_idxs:
+        # wrap Canth in xarray dataset to convert ∆DIC to total DIC over time
+        Canth_ds = xr.DataArray(p2.make_3D(Canth_all_scenarios[exp_idx, t_idx, :], ocnmask), dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+        DIC_modeled_3D = ds['delDIC'].isel(time=t_idx) + DIC_preind_ds + Canth_ds
+        
+        AT_modeled = p2.flatten(AT_modeled_3D.isel(time=t_idx).values, ocnmask)
+        DIC_modeled = p2.flatten(DIC_modeled_3D.values, ocnmask)
+
+        #  call co2sys to calculate Revelle factor
+        co2sys = pyco2.sys(
+            alkalinity=AT_modeled,
+            dic=DIC_modeled,
+            salinity=S,
+            temperature=T,
+            pressure=pressure,
+            total_silicate=Si,
+            total_phosphate=P)
+
+        revelle_factors[exp_idx, t_idx, :] = co2sys['revelle_factor']
+
+#%% make surface plots: three columns (2030, 2080, difference) and four rows (one for each)
+fig, axes = plt.subplots(4, 3, figsize=(15, 20))
+fig.suptitle('Revelle Factors', fontsize=16, weight='bold')
+
+rf_norm = plt.Normalize(vmin=8, vmax=20)
+rf_diff_norm = plt.Normalize(vmin=-5, vmax=5)
+
+# plot 2030
+for exp_idx in range(len(experiment_names)):
+    ax = axes[exp_idx, 0]
+    RF_to_plot = p2.make_3D(revelle_factors[exp_idx, 0, :], ocnmask)[:, :, 0]
+    ax.contourf(model_lon, model_lat, RF_to_plot, cmap='viridis', norm=rf_norm)                                                                                                                                                                                                                                                         
+    if exp_idx == 0:
+        ax.set_title('2030', fontsize=12)
+    ax.set_ylabel(scenarios[exp_idx], fontsize=10)
+
+# plot 2080
+for exp_idx in range(len(experiment_names)):
+    ax = axes[exp_idx, 1]
+    RF_to_plot = p2.make_3D(revelle_factors[exp_idx, 1, :], ocnmask)[:, :, 0]
+    ax.contourf(model_lon, model_lat, RF_to_plot, cmap='viridis', norm=rf_norm)                                                                                                                                                                                                                                                         
+    if exp_idx == 0:
+        ax.set_title('2080', fontsize=12)
+
+# plot difference
+for exp_idx in range(len(experiment_names)):
+    ax = axes[exp_idx, 2]
+    RF_to_plot = p2.make_3D(revelle_factors[exp_idx, 1, :], ocnmask)[:, :, 0] - p2.make_3D(revelle_factors[exp_idx, 0, :], ocnmask)[:, :, 0]
+    ax.contourf(model_lon, model_lat, RF_to_plot, cmap='seismic', norm=rf_diff_norm)                                                                                                                                                                                                                                                         
+    if exp_idx == 0:
+        ax.set_title('difference', fontsize=12)    
+
+fig.colorbar(plt.cm.ScalarMappable(norm=rf_norm, cmap='viridis'), ax=axes[:, :2], fraction=0.03, pad=0.02, label='Revelle factor')
+fig.colorbar(plt.cm.ScalarMappable(norm=rf_diff_norm, cmap='seismic'), ax=axes[:, 2], fraction=0.03, pad=0.02, label='Difference')
+
+#%% make transect plots: three columns (2030, 2080, difference) and four rows (one for each)
+fig, axes = plt.subplots(4, 3, figsize=(15, 20))
+fig.suptitle('Revelle Factors', fontsize=16, weight='bold')
+
+rf_norm = plt.Normalize(vmin=8, vmax=20)
+rf_diff_norm = plt.Normalize(vmin=-5, vmax=5)
+
+# plot 2030
+for exp_idx in range(len(experiment_names)):
+    ax = axes[exp_idx, 0]
+    RF_to_plot = p2.make_3D(revelle_factors[exp_idx, 0, :], ocnmask)[:, 105, :]
+    ax.contourf(model_lon, model_depth, RF_to_plot, cmap='viridis', norm=rf_norm)                                                                                                                                                                                                                                                         
+    if exp_idx == 0:
+        ax.set_title('2030', fontsize=12)
+    ax.set_ylabel(scenarios[exp_idx], fontsize=10)
+    ax.invert_yaxis()
+
+# plot 2080
+for exp_idx in range(len(experiment_names)):
+    ax = axes[exp_idx, 1]
+    RF_to_plot = p2.make_3D(revelle_factors[exp_idx, 1, :], ocnmask)[:, 105, :]
+    ax.contourf(model_lon, model_depth, RF_to_plot, cmap='viridis', norm=rf_norm)                                                                                                                                                                                                                                                         
+    if exp_idx == 0:
+        ax.set_title('2080', fontsize=12)
+    ax.invert_yaxis()
+
+# plot difference
+for exp_idx in range(len(experiment_names)):
+    ax = axes[exp_idx, 2]
+    RF_to_plot = p2.make_3D(revelle_factors[exp_idx, 1, :], ocnmask)[:, 105, :] - p2.make_3D(revelle_factors[exp_idx, 0, :], ocnmask)[:, :, 0]
+    ax.contourf(model_lon, model_depth, RF_to_plot, cmap='seismic', norm=rf_diff_norm)                                                                                                                                                                                                                                                         
+    if exp_idx == 0:
+        ax.set_title('difference', fontsize=12)    
+    ax.invert_yaxis()
+
+fig.colorbar(plt.cm.ScalarMappable(norm=rf_norm, cmap='viridis'), ax=axes[:, :2], fraction=0.03, pad=0.02, label='Revelle factor')
+fig.colorbar(plt.cm.ScalarMappable(norm=rf_diff_norm, cmap='seismic'), ax=axes[:, 2], fraction=0.03, pad=0.02, label='Difference')
 
 #%% line plot of pressure by index
 vmin = -50

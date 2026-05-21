@@ -25,3 +25,4 @@ RHS_1hr.mat
 RHS_1yr.mat
 *.pth
 *.save
+*.md
