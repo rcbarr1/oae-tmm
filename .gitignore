@@ -11,6 +11,7 @@ src/utils/pyTRACE/
 # ignore temporary or system files
 *.pyc
 __pycache__/
+*.egg-info/
 .DS_Store
 Dockerfile
 .dockerignore
