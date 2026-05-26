@@ -14,7 +14,6 @@ OCIM2-48L array conventions used throughout:
 """
 
 import numpy as np
-from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import convolve
 from tqdm import tqdm
 
@@ -219,82 +218,3 @@ def inpaint_nans_2d(array_2d: np.ndarray, iterations: int = 10,
 
     return interpolated
 
-
-def find_mld(model_lat: np.ndarray, model_lon: np.ndarray, ocnmask: np.ndarray,
-             MLD_da: np.ndarray, latm: np.ndarray, lonm: np.ndarray,
-             type_flag: int) -> np.ndarray:
-    """Interpolate the Holte et al. mixed layer depth climatology to the OCIM grid.
-
-    Reads a monthly climatology of mixed layer depth (MLD) from Holte et al.
-    and interpolates it onto the OCIM2-48L lat/lon grid. Can return either the
-    maximum monthly MLD (type_flag=0) or the mean monthly MLD (type_flag=1)
-    across the 12-month climatology. NaNs remaining after interpolation (e.g.,
-    in sea-ice regions) are filled using inpaint_nans_2d().
-
-    The Holte et al. data uses longitudes in the range -180 to 180, while OCIM
-    uses 0 to 360, so longitudes are converted before interpolating.
-
-    Parameters
-    ----------
-    model_lat : np.ndarray
-        1D array of OCIM2-48L latitude values [degrees N].
-    model_lon : np.ndarray
-        1D array of OCIM2-48L longitude values [degrees E, 0-360].
-    ocnmask : np.ndarray
-        Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
-    MLD_da : np.ndarray
-        Mixed layer depth from Holte et al. density algorithm; shape
-        (n_months, n_lon_holte, n_lat_holte) [m].
-    latm : np.ndarray
-        2D latitude grid from Holte et al. [degrees N].
-    lonm : np.ndarray
-        2D longitude grid from Holte et al. [degrees E, -180 to 180].
-    type_flag : int
-        0 = return maximum monthly MLD across all months.
-        1 = return mean monthly MLD across all months.
-
-    Returns
-    -------
-    np.ndarray
-        2D array of shape (n_lat, n_lon) with MLD values [m] on the OCIM grid.
-    """
-    if type_flag == 0:
-        MLDs = np.nanmax(MLD_da, axis=0)   # deepest MLD across all months
-    elif type_flag == 1:
-        MLDs = np.nanmean(MLD_da, axis=0)  # average MLD across all months
-    else:
-        print('ERROR: type_flag should be specified as 0 or 1')
-
-    # convert Holte et al. longitudes from -180-180 to 0-360 to match OCIM
-    lonm[lonm <= 0] += 360
-
-    # sort ascending along longitude so RegularGridInterpolator requirements are met
-    lonm_1d = lonm[:, 0]
-    sort_idx = np.argsort(lonm_1d)
-    lonm_1d = lonm_1d[sort_idx]
-    lonm = lonm[sort_idx, :]
-    MLDs = MLDs[sort_idx, :]
-
-    # pad lon and lat boundaries so interpolation does not fail at the edges
-    # (wrapping the globe and extending slightly past the poles)
-    lonm = np.vstack([lonm[-1, :] - 360, lonm, lonm[0, :] + 360])
-    latm = np.vstack([latm[-1, :], latm, latm[0, :]])
-    MLDs = np.vstack([MLDs[-1, :], MLDs, MLDs[0, :]])
-
-    latm = np.hstack([latm[:, 0:1] - 1, latm, latm[:, -1:] + 1])
-    lonm = np.hstack([lonm[:, 0:1], lonm, lonm[:, -1:]])
-    MLDs = np.hstack([MLDs[:, 0:1], MLDs, MLDs[:, -1:]])
-
-    interp = RegularGridInterpolator(
-        (latm[:, 0], lonm[0, :]), MLDs, bounds_error=False, fill_value=None
-    )
-
-    # build query points on the OCIM lat/lon grid
-    lat, lon = np.meshgrid(model_lat, model_lon, indexing='ij')
-    query_points = np.array([lat.ravel(), lon.ravel()]).T
-    var = interp(query_points).reshape(lon.shape)
-
-    # fill any remaining NaNs (common in sea-ice regions) using neighbor averaging
-    interp_MLDs = inpaint_nans_2d(var, mask=ocnmask[:, :, 0].astype(bool))
-
-    return interp_MLDs
