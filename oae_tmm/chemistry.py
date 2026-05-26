@@ -14,13 +14,7 @@ import warnings
 def schmidt_number(gas: str, temperature: np.ndarray) -> np.ndarray:
     """Calculate the Schmidt number for a gas in seawater (Wanninkhof 2014).
 
-    The Schmidt number (Sc) is the ratio of kinematic viscosity to molecular
-    diffusivity for a gas in seawater. It appears in the Wanninkhof (2014)
-    parameterization of the gas transfer velocity: k ∝ Sc^(-0.5).
-
     Coefficients are valid for seawater temperatures from -2°C to 40°C.
-    Unlike the original project2.py implementation, this function accepts
-    numpy arrays for temperature directly — no np.vectorize wrapper needed.
 
     Reference: Wanninkhof, R. (2014). Relationship between wind speed and gas
     exchange over the ocean revisited. Limnology and Oceanography: Methods,
@@ -29,7 +23,7 @@ def schmidt_number(gas: str, temperature: np.ndarray) -> np.ndarray:
     Parameters
     ----------
     gas : str
-        Gas of interest. One of: 'CO2', 'O2', 'N2', 'Ar'.
+        Gas of interest. One of: 'O2', 'CO2', 'N2', 'Ar'.
     temperature : float or np.ndarray
         Seawater temperature [degrees C]. Accepts scalars or arrays of any shape.
 
@@ -42,7 +36,7 @@ def schmidt_number(gas: str, temperature: np.ndarray) -> np.ndarray:
     sc_coeffs = {
         'O2':  [1920.4, -135.6,   5.2122, -0.10939,  0.00093777],
         'CO2': [2116.8, -136.25,  4.7353, -0.092307, 0.0007555],
-        'N2':  [2403.8, -162.75,  6.2557, -0.13129,  0.0011255],
+        'N2':  [2304.8, -162.75,  6.2557, -0.13129,  0.0011255],
         'Ar':  [2078.1, -146.74,  5.6403, -0.11838,  0.0010148],
     }
 
@@ -50,15 +44,13 @@ def schmidt_number(gas: str, temperature: np.ndarray) -> np.ndarray:
         raise ValueError(f"Gas '{gas}' not supported. Choose from {list(sc_coeffs.keys())}")
 
     a, b, c, d, e = sc_coeffs[gas]
-
-    # numpy operations broadcast over arrays automatically — no vectorize needed
     Sc = a + (b * temperature) + (c * temperature**2) + (d * temperature**3) + (e * temperature**4)
 
     return Sc
 
 
 def get_co2_scenario(scenario: str, times: np.ndarray,
-                     co2_data_path: str = './src/utils/pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted.txt') -> np.ndarray:
+                     co2_data_path: str = './pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted.txt') -> np.ndarray:
     """Return atmospheric CO2 concentrations for a given SSP scenario and times.
 
     Interpolates from the pyTRACE CO2 trajectory file (originally from the
@@ -76,9 +68,8 @@ def get_co2_scenario(scenario: str, times: np.ndarray,
     Data source: https://greenhousegases.science.unimelb.edu.au/#!/ghg?mode=downloads
     (via pyTRACE CO2TrajectoriesAdjusted.txt)
 
-    Note on co2_data_path: this currently points into src/utils/pyTRACE/ using
-    a path relative to the working directory. This will need updating when src/
-    is removed in Step 15 of the refactoring plan.
+    Note on co2_data_path: this points to pyTRACE/ at the repo root using a
+    path relative to the working directory. Update if run from a different cwd.
 
     Parameters
     ----------
@@ -89,7 +80,7 @@ def get_co2_scenario(scenario: str, times: np.ndarray,
         1D array of times [decimal years CE] at which to return CO2.
     co2_data_path : str, optional
         Path to CO2TrajectoriesAdjusted.txt. Defaults to the location inside
-        the pyTRACE submodule under src/.
+        the pyTRACE submodule.
 
     Returns
     -------
@@ -114,7 +105,7 @@ def get_co2_scenario(scenario: str, times: np.ndarray,
     else:
         if times[0] >= 2020:
             warnings.warn("'none' scenario selected but times start at or after 2020. "
-                          "CO2 is held constant based on a linear extrapolation from 2012-2022.")
+                          "Canth is held constant based on a linear extrapolation from 2012-2022.")
         # hold CO2 constant at the value for the first time point
         atmospheric_CO2 = np.interp(times[0], CO2_data_years, CO2_data) * np.ones_like(times)
 

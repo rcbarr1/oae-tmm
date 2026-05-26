@@ -1021,7 +1021,7 @@ def get_CO2_scenario(scenario, times):
 
     # open file, pull out scenario of interest
 
-    data_file = './src/utils/pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted.txt'
+    data_file = './pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted.txt'
     data = np.loadtxt(data_file)
 
     CO2_data_years = data[:,0]
