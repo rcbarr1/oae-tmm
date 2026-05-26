@@ -15,7 +15,7 @@ OCIM2-48L array conventions used throughout:
 
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
-from scipy.ndimage import convolve, uniform_filter
+from scipy.ndimage import convolve
 from tqdm import tqdm
 
 
@@ -68,49 +68,6 @@ def make_3d(field_flat: np.ndarray, ocnmask: np.ndarray) -> np.ndarray:
 
     return field_3d
 
-
-def smooth_tracer(field_flat: np.ndarray, ocnmask: np.ndarray) -> np.ndarray:
-    """Smooth a tracer field by averaging each cell with its 3D neighborhood.
-
-    Applies a 5x5x5 uniform (box) filter across all three spatial dimensions.
-    Only ocean cells contribute to each neighborhood average — land cells are
-    zeroed out before filtering and the count of valid ocean neighbors is tracked
-    separately so the average is not diluted by land. The longitude axis is
-    padded with a wrap to correctly handle the periodic boundary of the global
-    ocean (i.e., the dateline).
-
-    Parameters
-    ----------
-    field_flat : np.ndarray
-        1D ocean-only tracer vector of length m.
-    ocnmask : np.ndarray
-        Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
-
-    Returns
-    -------
-    np.ndarray
-        1D ocean-only smoothed tracer vector of length m.
-    """
-    field_3d = make_3d(field_flat, ocnmask)
-    field_3d = np.nan_to_num(field_3d, nan=0.0)  # land cells = 0 for averaging
-
-    # pad longitude axis with a wrap so the filter sees the correct neighbors
-    # at the dateline (0/360 boundary)
-    field_pad = np.pad(field_3d, ((0, 0), (2, 2), (0, 0)), mode='wrap')
-    ocnmask_pad = np.pad(ocnmask, ((0, 0), (2, 2), (0, 0)), mode='wrap')
-
-    # sum tracer values in each 5x5x5 neighborhood, weighted by ocean mask
-    field_sum_pad = uniform_filter(field_pad * ocnmask_pad, size=(5, 5, 5), mode='constant', cval=0)
-
-    # count ocean cells in each neighborhood to compute true average
-    ocnmask_pad_count = uniform_filter(ocnmask_pad.astype(float), size=(5, 5, 5), mode='constant', cval=0)
-
-    ocnmask_pad_count[ocnmask_pad_count == 0] = np.nan  # avoid division by zero at isolated cells
-    field_smooth_pad = field_sum_pad / ocnmask_pad_count
-
-    # remove longitude padding and return as 1D
-    field_smooth_3d = field_smooth_pad[:, 2:-2, :]
-    return flatten(field_smooth_3d, ocnmask)
 
 
 def get_depth_idx(ocnmask: np.ndarray, depth_level: int) -> np.ndarray:
