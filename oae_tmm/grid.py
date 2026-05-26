@@ -69,35 +69,32 @@ def make_3d(field_flat: np.ndarray, ocnmask: np.ndarray) -> np.ndarray:
     return field_3d
 
 
-
 def get_depth_idx(ocnmask: np.ndarray, depth_level: int) -> np.ndarray:
-    """Return the flat indices of ocean cells at the surface depth level.
+    """Return the flat indices of ocean cells at a given depth level.
 
-    Identifies all ocean grid cells at depth index 0 (the surface layer) and
-    returns their positions within the flattened 1D ocean-only vector produced
-    by flatten(). Note: the depth_level parameter is accepted for API
-    consistency but currently the function always returns surface (depth
-    index 0) indices.
+    Identifies all ocean grid cells at the specified depth index and returns
+    their positions within the flattened 1D ocean-only vector produced by
+    flatten(). All experiments currently call this with depth_level=0 to
+    select surface grid cells.
 
     Parameters
     ----------
     ocnmask : np.ndarray
         Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
     depth_level : int
-        Depth index of interest (currently unused; surface layer is always
-        returned).
+        Index into the depth dimension of ocnmask. 0 = surface layer.
 
     Returns
     -------
     np.ndarray
-        2D array of shape (n_surface_cells, 1) containing the flat indices of
-        surface ocean cells within the 1D ocean-only vector.
+        2D array of shape (n_cells, 1) containing the flat indices of ocean
+        cells at depth_level within the 1D ocean-only vector.
     """
-    surf_mask = np.zeros_like(ocnmask)
-    surf_mask[:, :, 0] = 1  # select only the top depth layer
+    depth_mask = np.zeros_like(ocnmask)
+    depth_mask[:, :, depth_level] = 1
 
-    ocn_surf_mask = ocnmask * surf_mask
-    return np.argwhere(flatten(ocn_surf_mask, ocnmask) == 1)
+    ocn_depth_mask = ocnmask * depth_mask
+    return np.argwhere(flatten(ocn_depth_mask, ocnmask) == 1)
 
 
 def inpaint_nans_3d(array_3d: np.ndarray, iterations: int = 10,

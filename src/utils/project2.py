@@ -213,14 +213,14 @@ def smooth_tracer3D(e_flat, ocnmask):
 
 def get_depth_idx(ocnmask, depth_level):
     '''
-    returns indicies in 3D array flattened using flatten() above that correspond to 
-    values at a depth level represented by depth_idx
+    returns indicies in 3D array flattened using flatten() above that correspond to
+    values at a depth level represented by depth_level
     '''
-    surf_mask = np.zeros_like(ocnmask)
-    surf_mask[:, :, 0] = 1
+    depth_mask = np.zeros_like(ocnmask)
+    depth_mask[:, :, depth_level] = 1
 
-    ocn_surf_mask = ocnmask * surf_mask
-    return np.argwhere(flatten(ocn_surf_mask, ocnmask)==1)
+    ocn_depth_mask = ocnmask * depth_mask
+    return np.argwhere(flatten(ocn_depth_mask, ocnmask)==1)
 
 
 def find_MLD(model_lat, model_lon, ocnmask, MLD_da, latm, lonm, type_flag):
