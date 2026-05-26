@@ -24,6 +24,8 @@ def load_mat(filename: str) -> dict:
     This function recursively converts them to plain Python dicts so that
     fields can be accessed with standard bracket notation.
 
+    From https://stackoverflow.com/questions/7008608/scipy-io-loadmat-nested-structures-i-e-dictionaries
+
     Parameters
     ----------
     filename : str
@@ -73,13 +75,12 @@ def load_ocim(data_path: str) -> dict:
 
     Reads the sparse transport matrix from a MATLAB .mat file and the
     associated grid variables (ocean mask, coordinates, volumes) from a
-    NetCDF file. This block of loading code is identical across all
-    experiments and is encapsulated here to avoid repetition.
+    NetCDF file.
 
     Parameters
     ----------
     data_path : str
-        Path to the data directory (must contain OCIM2_48L_base/).
+        Path to the data directory where OCIM2-48L matrix is stored in OCIM2_48L_base/
 
     Returns
     -------
@@ -104,14 +105,14 @@ def load_ocim(data_path: str) -> dict:
     ocnmask         = model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_numpy()
     model_lat       = model_data['tlat'].isel(depth=0, longitude=0).to_numpy()     # degrees N
     model_lon       = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()      # degrees E
-    model_depth     = model_data['tz'].isel(longitude=0, latitude=0).to_numpy()    # m below surface
+    model_depth     = model_data['tz'].isel(longitude=0, latitude=0).to_numpy()    # m below sea surface
     model_vols      = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy()  # m^3
 
     # wz gives the bottom depth of each layer; z1 is the thickness of the surface layer
     grid_cell_depth = model_data['wz'].transpose('latitude', 'longitude', 'depth').to_numpy()  # m
     z1 = grid_cell_depth[0, 0, 1]
 
-    surf_idx = get_depth_idx(ocnmask, 0)
+    surf_idx = get_depth_idx(ocnmask, 0) # indicies of surface grid cells in 3D array flattened by grid.flatten()
     rho = 1025  # reference seawater density [kg m^-3]
 
     return {
@@ -137,7 +138,7 @@ def load_glodap(data_path: str) -> dict:
     Parameters
     ----------
     data_path : str
-        Path to the data directory (must contain GLODAPv2.2016b.MappedProduct/).
+        Path to the data directory where data is stored in GLODAPv2.2016b.MappedProduct/
 
     Returns
     -------
@@ -169,8 +170,8 @@ def load_ncep_noaa(data_path: str) -> dict:
     Parameters
     ----------
     data_path : str
-        Path to the data directory (must contain NCEP_DOE_Reanalysis_II/ and
-        NOAA_Extended_Reconstruction_SST_V5/).
+        Path to the data directory where data is stored in NCEP_DOE_Reanalysis_II/ and
+        NOAA_Extended_Reconstruction_SST_V5/
 
     Returns
     -------

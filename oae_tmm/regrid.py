@@ -4,7 +4,7 @@ One-time data preprocessing functions for oae-tmm.
 These functions convert raw observational data products to the OCIM2-48L grid
 and save the results as .npy files. They are called once from
 scripts/generate_input_data.py, not during experiment runs. The functions
-serve as living documentation of exactly how each input dataset was processed.
+serve as documentation of exactly how each input dataset was processed.
 
 Data sources:
   - GLODAPv2.2016b: https://glodap.info/index.php/mapped-data-product/
@@ -37,7 +37,7 @@ def regrid_glodap(data_path: str, glodap_var: str, model_lat: np.ndarray,
     Parameters
     ----------
     data_path : str
-        Path to the data directory (must contain GLODAPv2.2016b.MappedProduct/).
+        Path to the data directory GLODAPv2.2016b.MappedProduct/
     glodap_var : str
         Variable name as it appears in the GLODAP NetCDF file (e.g., 'TCO2',
         'TAlk', 'temperature', 'salinity', 'silicate', 'PO4').
@@ -80,7 +80,7 @@ def regrid_glodap(data_path: str, glodap_var: str, model_lat: np.ndarray,
     # restore model longitudes
     model_lon[model_lon > 360] -= 360
 
-    # silicate and phosphate can go slightly negative due to interpolation near zero
+    # silicate and phosphate can go slightly negative due to interpolation near zero, set to zero if needed
     if glodap_var in ('PO4', 'silicate'):
         var[var < 0] = 0
 
@@ -107,7 +107,7 @@ def regrid_woa(data_path: str, woa_var: str, model_lat: np.ndarray,
     Parameters
     ----------
     data_path : str
-        Path to the data directory (must contain WOA18/).
+        Path to the data directory WOA18/
     woa_var : str
         Variable to regrid. One of: 'S' (salinity), 'T' (temperature),
         'Si' (silicate), 'P' (phosphate).
@@ -245,8 +245,7 @@ def regrid_cobalt(cobalt_vrbl, model_lat: np.ndarray, model_lon: np.ndarray,
 
     Averages across the COBALT time dimension, converts longitudes from the
     COBALT convention (-300 to +60) to 0-360, interpolates to the OCIM2-48L
-    grid, and fills NaNs. Progress is printed at each stage because this
-    function is slow for large COBALT arrays.
+    grid, and fills NaNs.
 
     Parameters
     ----------
@@ -266,31 +265,22 @@ def regrid_cobalt(cobalt_vrbl, model_lat: np.ndarray, model_lon: np.ndarray,
     cobalt_var = cobalt_vrbl.copy()
     var_name = cobalt_var.name
     print('begin regrid of ' + var_name)
-
     start_time = time.time()
+    
     cobalt_var = cobalt_var.where(cobalt_var != 1e20)  # replace fill value with NaN
-    print('\tNaN values replaced: ' + str(round(time.time() - start_time, 3)) + ' s')
-
-    start_time = time.time()
     cobalt_var = cobalt_var.mean(dim='time', skipna=True)
-    print('\taveraged across time: ' + str(round(time.time() - start_time, 3)) + ' s')
-
-    start_time = time.time()
+    
     # convert COBALT longitudes from -300-+60 to 0-360 to match OCIM
     cobalt_var['xh'] = (cobalt_var['xh'] + 360) % 360
     cobalt_var = cobalt_var.sortby('xh')
-    print('\tlongitude converted to OCIM coordinates: ' + str(round(time.time() - start_time, 3)) + ' s')
 
     cobalt_lat   = cobalt_var['yh'].to_numpy()
     cobalt_lon   = cobalt_var['xh'].to_numpy()
     cobalt_depth = cobalt_var['zl'].to_numpy()
 
-    start_time = time.time()
     # transpose to (lat, lon, depth) to match OCIM dimension order
     var = cobalt_var.transpose('yh', 'xh', 'zl').values
-    print('\tvalues extracted to numpy: ' + str(round(time.time() - start_time, 3)) + ' s')
-
-    start_time = time.time()
+    
     interp = RegularGridInterpolator(
         (cobalt_lat, cobalt_lon, cobalt_depth), var, method='linear',
         bounds_error=False, fill_value=None
@@ -299,11 +289,8 @@ def regrid_cobalt(cobalt_vrbl, model_lat: np.ndarray, model_lon: np.ndarray,
     lat, lon, depth = np.meshgrid(model_lat, model_lon, model_depth, indexing='ij')
     query_points = np.array([lat.ravel(), lon.ravel(), depth.ravel()]).T
     var_interped = interp(query_points).reshape(depth.shape)
-    print('\tinterpolation performed: ' + str(round(time.time() - start_time, 3)) + ' s')
 
-    start_time = time.time()
     var_inpainted = inpaint_nans_3d(var_interped, mask=ocnmask.astype(bool))
-    print('\tNaNs inpainted: ' + str(round(time.time() - start_time, 3)) + ' s')
 
     np.save(data_path + 'COBALT_regridded/' + var_name + '.npy', var_inpainted)
-    print('\tfinal regridded array saved')
+    print('\tregrid complete in ' + str(round(time.time() - start_time, 3)) + ' s')
