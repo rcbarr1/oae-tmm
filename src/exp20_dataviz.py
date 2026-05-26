@@ -643,7 +643,7 @@ ax.spines['right'].set_color(textcolor)
 # plot RF in 2030 and 2080 for all four scenarios at surface and in ocean basins: Atlantic (25.5°W), Pacific (150.5ºW), and Indian (90.5°E)
 # plot difference in RF between 2080 and 2030 for all four scenarios and in ocean basins
 
-# Canth_all_scenarios = np.load(output_path + 'Canth_all_scenarios_calculated_2030-2080.npy')
+Canth_all_scenarios = np.load(output_path + 'Canth_all_scenarios_calculated_2030-2080.npy')
 
 # get preindustrial baselines for DIC & AT
 DIC_preind_ds = xr.DataArray(DIC_preind_3D, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
@@ -686,8 +686,8 @@ for exp_idx in range(len(experiment_names)):
         revelle_factors[exp_idx, t_idx, :] = co2sys['revelle_factor']
 
 #%% make surface plots: three columns (2030, 2080, difference) and four rows (one for each)
-fig, axes = plt.subplots(4, 3, figsize=(15, 20))
-fig.suptitle('Revelle Factors', fontsize=16, weight='bold')
+fig, axes = plt.subplots(4, 3, figsize=(10, 12), dpi=200)
+# fig.suptitle('Revelle Factors', fontsize=16, weight='bold')
 
 rf_norm = plt.Normalize(vmin=8, vmax=20)
 rf_diff_norm = plt.Normalize(vmin=-5, vmax=5)
@@ -721,8 +721,14 @@ fig.colorbar(plt.cm.ScalarMappable(norm=rf_norm, cmap='viridis'), ax=axes[:, :2]
 fig.colorbar(plt.cm.ScalarMappable(norm=rf_diff_norm, cmap='seismic'), ax=axes[:, 2], fraction=0.03, pad=0.02, label='Difference')
 
 #%% make transect plots: three columns (2030, 2080, difference) and four rows (one for each)
-fig, axes = plt.subplots(4, 3, figsize=(15, 20))
-fig.suptitle('Revelle Factors', fontsize=16, weight='bold')
+fig, axes = plt.subplots(4, 3, figsize=(12, 12), dpi=200)
+# fig.suptitle('Revelle Factors', fontsize=16, weight='bold')
+
+# model_lon[105] = 149 ºW (Pacific)
+# model_lon[167] = 25 ºW (Atlantic)
+# model_lon[45] = 91 ºE (Indian)
+
+lon_idx = 105
 
 rf_norm = plt.Normalize(vmin=8, vmax=20)
 rf_diff_norm = plt.Normalize(vmin=-5, vmax=5)
@@ -730,8 +736,8 @@ rf_diff_norm = plt.Normalize(vmin=-5, vmax=5)
 # plot 2030
 for exp_idx in range(len(experiment_names)):
     ax = axes[exp_idx, 0]
-    RF_to_plot = p2.make_3D(revelle_factors[exp_idx, 0, :], ocnmask)[:, 105, :]
-    ax.contourf(model_lon, model_depth, RF_to_plot, cmap='viridis', norm=rf_norm)                                                                                                                                                                                                                                                         
+    RF_to_plot = p2.make_3D(revelle_factors[exp_idx, 0, :], ocnmask)[:, lon_idx, :]
+    ax.contourf(model_lat, model_depth, RF_to_plot.T, cmap='viridis', norm=rf_norm)                                                                                                                                                                                                                                                         
     if exp_idx == 0:
         ax.set_title('2030', fontsize=12)
     ax.set_ylabel(scenarios[exp_idx], fontsize=10)
@@ -740,8 +746,8 @@ for exp_idx in range(len(experiment_names)):
 # plot 2080
 for exp_idx in range(len(experiment_names)):
     ax = axes[exp_idx, 1]
-    RF_to_plot = p2.make_3D(revelle_factors[exp_idx, 1, :], ocnmask)[:, 105, :]
-    ax.contourf(model_lon, model_depth, RF_to_plot, cmap='viridis', norm=rf_norm)                                                                                                                                                                                                                                                         
+    RF_to_plot = p2.make_3D(revelle_factors[exp_idx, 1, :], ocnmask)[:, lon_idx, :]
+    ax.contourf(model_lat, model_depth, RF_to_plot.T, cmap='viridis', norm=rf_norm)                                                                                                                                                                                                                                                         
     if exp_idx == 0:
         ax.set_title('2080', fontsize=12)
     ax.invert_yaxis()
@@ -749,8 +755,8 @@ for exp_idx in range(len(experiment_names)):
 # plot difference
 for exp_idx in range(len(experiment_names)):
     ax = axes[exp_idx, 2]
-    RF_to_plot = p2.make_3D(revelle_factors[exp_idx, 1, :], ocnmask)[:, 105, :] - p2.make_3D(revelle_factors[exp_idx, 0, :], ocnmask)[:, :, 0]
-    ax.contourf(model_lon, model_depth, RF_to_plot, cmap='seismic', norm=rf_diff_norm)                                                                                                                                                                                                                                                         
+    RF_to_plot = p2.make_3D(revelle_factors[exp_idx, 1, :], ocnmask)[:, lon_idx, :] - p2.make_3D(revelle_factors[exp_idx, 0, :], ocnmask)[:, lon_idx, :]
+    ax.contourf(model_lat, model_depth, RF_to_plot.T, cmap='seismic', norm=rf_diff_norm)                                                                                                                                                                                                                                                         
     if exp_idx == 0:
         ax.set_title('difference', fontsize=12)    
     ax.invert_yaxis()
