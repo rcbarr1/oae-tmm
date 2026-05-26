@@ -73,8 +73,8 @@ def get_depth_idx(ocnmask: np.ndarray, depth_level: int) -> np.ndarray:
 
     Identifies all ocean grid cells at the specified depth index and returns
     their positions within the flattened 1D ocean-only vector produced by
-    flatten(). All experiments currently call this with depth_level=0 to
-    select surface grid cells.
+    flatten(). For example, calling with depth_level=0 would find the index
+    of surface grid cells in the flattened ocean-only vector. 
 
     Parameters
     ----------
@@ -138,16 +138,19 @@ def inpaint_nans_3d(array_3d: np.ndarray, iterations: int = 10,
     nan_mask = np.isnan(interpolated)
     interpolated[nan_mask] = np.nanmean(interpolated)  # initialize NaNs to global mean
 
+    # optional land mask to persist NaNs in land areas
     if mask is not None:
         land_mask = ~mask.astype(bool)  # True where land
     else:
         land_mask = np.zeros_like(array_3d, dtype=bool)
 
     for _ in range(iterations):
+        # cound valid neighbors
         valid = ~np.isnan(interpolated)
         neighbor_sum = convolve(np.nan_to_num(interpolated), kernel, mode='wrap')
         neighbor_count = convolve(valid.astype(float), kernel, mode='wrap')
 
+        # avoid division by 0
         with np.errstate(invalid='ignore', divide='ignore'):
             new_vals = neighbor_sum / neighbor_count
 
@@ -167,8 +170,6 @@ def inpaint_nans_2d(array_2d: np.ndarray, iterations: int = 10,
 
     2D analogue of inpaint_nans_3d(), using a 4-connected stencil (+/-x, +/-y).
     Used for surface-only fields such as wind speed, ice fraction, and SST.
-    A tqdm progress bar is shown because this function can be slow for large
-    grids with many NaN cells (e.g., sea-ice-covered regions).
 
     Parameters
     ----------
@@ -197,19 +198,23 @@ def inpaint_nans_2d(array_2d: np.ndarray, iterations: int = 10,
     nan_mask = np.isnan(interpolated)
     interpolated[nan_mask] = np.nanmean(interpolated)  # initialize NaNs to global mean
 
+    # optional land mask to persist NaNs in land areas
     if mask is not None:
         land_mask = ~mask.astype(bool)  # True where land
     else:
         land_mask = np.zeros_like(array_2d, dtype=bool)
 
-    for _ in tqdm(range(iterations), desc="inpainting"):
+    for _ in range(iterations):
+        # count valid neighbors
         valid = ~np.isnan(interpolated)
         neighbor_sum = convolve(np.nan_to_num(interpolated), kernel, mode='wrap')
         neighbor_count = convolve(valid.astype(float), kernel, mode='wrap')
 
+        # avoid division by 0
         with np.errstate(invalid='ignore', divide='ignore'):
             new_vals = neighbor_sum / neighbor_count
 
+        # only update cells that were originally NaN, are ocean, and have at least one valid neighbor
         update_mask = nan_mask & ~land_mask & (neighbor_count > 0)
         interpolated[update_mask] = new_vals[update_mask]
 
