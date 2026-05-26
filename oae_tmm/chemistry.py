@@ -1,10 +1,11 @@
 """
-Carbonate chemistry and atmospheric CO2 functions for oae-tmm.
+Physical parameterization functions for oae-tmm.
 
-These functions compute gas exchange parameters and retrieve atmospheric CO2
-concentrations for SSP emissions scenarios. They do not load data from disk
-(except get_co2_scenario, which reads a small text file bundled with pyTRACE)
-and do not call the PETSc solver.
+These functions implement Wanninkhof (2014) gas transfer physics (Schmidt
+number, piston velocity) and retrieve atmospheric CO2 concentrations for SSP
+emissions scenarios. They do not load observational data from disk (except
+get_co2_scenario, which reads a small text file bundled with pyTRACE) and do
+not call the PETSc solver.
 """
 
 import numpy as np
@@ -110,3 +111,38 @@ def get_co2_scenario(scenario: str, times: np.ndarray,
         atmospheric_CO2 = np.interp(times[0], CO2_data_years, CO2_data) * np.ones_like(times)
 
     return atmospheric_CO2
+
+
+def calc_piston_velocity(sst_2D: np.ndarray, wspd_2D: np.ndarray) -> np.ndarray:
+    """Compute the CO2 piston velocity from sea surface temperature and wind speed.
+
+    Implements the Wanninkhof (2014) parameterization:
+        k = a * U^2 * (Sc / 660)^(-0.5)
+    where a = 0.251 is the Wanninkhof (2014) scaling coefficient for annual-
+    mean wind speeds, U is 10-m wind speed, and Sc is the Schmidt number for
+    CO2 evaluated at SST. 
+
+    Output is converted from cm h^-1 to m yr^-1 for use with the annual-
+    timestep OCIM2-48L transport matrix.
+
+    Reference: Wanninkhof, R. (2014). Relationship between wind speed and gas
+    exchange over the ocean revisited. Limnology and Oceanography: Methods,
+    12(6), 351-362.
+
+    Parameters
+    ----------
+    sst_2D : np.ndarray
+        Annual mean sea surface temperature [degrees C], shape (n_lat, n_lon).
+    wspd_2D : np.ndarray
+        Annual mean wind speed at 10 m [m s^-1], shape (n_lat, n_lon).
+
+    Returns
+    -------
+    np.ndarray
+        Piston velocity [m yr^-1], shape (n_lat, n_lon).
+    """
+    Sc_2D = schmidt_number('CO2', sst_2D)
+    k_2D = 0.251 * wspd_2D**2 * (Sc_2D / 660)**-0.5  # [cm h^-1]
+    k_2D *= (24 * 365.25 / 100)  # convert cm h^-1 to m yr^-1
+    return k_2D
+
