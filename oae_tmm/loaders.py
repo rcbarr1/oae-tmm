@@ -14,7 +14,7 @@ import xarray as xr
 import scipy.io as spio
 import geopandas as gpd
 from shapely.geometry import Point
-from oae_tmm.grid import get_depth_idx
+from oae_tmm.grid import flatten, get_depth_idx
 
 
 def load_mat(filename: str) -> dict:
@@ -90,8 +90,10 @@ def load_ocim(data_path: str) -> dict:
         model_lat       : np.ndarray (n_lat,), latitude of grid cell centers [degrees N]
         model_lon       : np.ndarray (n_lon,), longitude of grid cell centers [degrees E]
         model_depth     : np.ndarray (n_depth,), depth of layer centers [m]
-        model_vols      : np.ndarray (n_lat, n_lon, n_depth), grid cell volumes [m^3]
-        grid_cell_depth : np.ndarray (n_lat, n_lon, n_depth), depth of layer bottoms [m]
+        model_vols      : np.ndarray (m,), grid cell volumes [m^3]
+        grid_cell_depth : np.ndarray (m,), depth of layer bottoms [m]
+        pressure        : np.ndarray (m,), pressure at each ocean cell [dbar]
+        mld             : np.ndarray (n_lat, n_lon), annual mean mixed layer depth [m]
         z1              : float, thickness of the surface model layer [m]
         surf_idx        : np.ndarray (n_surface_cells, 1), flat indices of surface ocean cells
         rho             : float, reference seawater density [kg m^-3]
@@ -109,81 +111,99 @@ def load_ocim(data_path: str) -> dict:
     model_vols      = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy()  # m^3
 
     # wz gives the bottom depth of each layer; z1 is the thickness of the surface layer
-    grid_cell_depth = model_data['wz'].transpose('latitude', 'longitude', 'depth').to_numpy()  # m
-    z1 = grid_cell_depth[0, 0, 1]
+    grid_cell_depth_3D = model_data['wz'].transpose('latitude', 'longitude', 'depth').to_numpy()  # m
+    z1 = grid_cell_depth_3D[0, 0, 1]
+    mld = model_data['mld'].transpose('latitude', 'longitude').to_numpy()  # m
 
-    surf_idx = get_depth_idx(ocnmask, 0) # indicies of surface grid cells in 3D array flattened by grid.flatten()
+    surf_idx = get_depth_idx(ocnmask, 0)  # indices of surface grid cells in flattened ocean vector
     rho = 1025  # reference seawater density [kg m^-3]
 
+    # pressure [dbar ≈ m]: broadcast depth to 3D, then flatten
+    depth_3D = np.broadcast_to(model_depth[np.newaxis, np.newaxis, :], ocnmask.shape)
+
     return {
-        'TR': TR,
-        'ocnmask': ocnmask,
-        'model_lat': model_lat,
-        'model_lon': model_lon,
-        'model_depth': model_depth,
-        'model_vols': model_vols,
-        'grid_cell_depth': grid_cell_depth,
-        'z1': z1,
-        'surf_idx': surf_idx,
-        'rho': rho,
+        'TR':              TR,
+        'ocnmask':         ocnmask,
+        'model_lat':       model_lat,
+        'model_lon':       model_lon,
+        'model_depth':     model_depth,
+        'model_vols':      flatten(model_vols, ocnmask),
+        'grid_cell_depth': flatten(grid_cell_depth_3D, ocnmask),
+        'pressure':        flatten(depth_3D, ocnmask),
+        'mld':             mld,
+        'z1':              z1,
+        'surf_idx':        surf_idx,
+        'rho':             rho,
     }
 
 
-def load_glodap(data_path: str) -> dict:
+def load_glodap(data_path: str, ocnmask: np.ndarray) -> dict:
     """Load pre-regridded GLODAPv2 fields from disk.
 
-    Reads the .npy files produced by regrid.regrid_glodap(). All fields are
-    on the OCIM2-48L grid (n_lat, n_lon, n_depth) with land cells as NaN.
+    Reads the .npy files produced by regrid.regrid_glodap() and flattens each
+    field to a 1D ocean-only vector using the OCIM2-48L ocean mask.
 
     Parameters
     ----------
     data_path : str
         Path to the data directory where data is stored in GLODAPv2.2016b.MappedProduct/
+    ocnmask : np.ndarray
+        Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
 
     Returns
     -------
     dict with keys:
-        T_3D   : np.ndarray, temperature [degrees C]
-        S_3D   : np.ndarray, salinity [unitless]
-        DIC_3D : np.ndarray, dissolved inorganic carbon [µmol kg^-1]
-        AT_3D  : np.ndarray, total alkalinity [µmol kg^-1]
-        Si_3D  : np.ndarray, silicate [µmol kg^-1]
-        P_3D   : np.ndarray, phosphate [µmol kg^-1]
+        T   : np.ndarray (m,), temperature [degrees C]
+        S   : np.ndarray (m,), salinity [unitless]
+        DIC : np.ndarray (m,), dissolved inorganic carbon [µmol kg^-1]
+        AT  : np.ndarray (m,), total alkalinity [µmol kg^-1]
+        Si  : np.ndarray (m,), silicate [µmol kg^-1]
+        P   : np.ndarray (m,), phosphate [µmol kg^-1]
     """
     base = data_path + 'GLODAPv2.2016b.MappedProduct/'
     return {
-        'T_3D':   np.load(base + 'temperature.npy'),
-        'S_3D':   np.load(base + 'salinity.npy'),
-        'DIC_3D': np.load(base + 'DIC.npy'),
-        'AT_3D':  np.load(base + 'TA.npy'),
-        'Si_3D':  np.load(base + 'silicate.npy'),
-        'P_3D':   np.load(base + 'PO4.npy'),
+        'T':   flatten(np.load(base + 'temperature.npy'), ocnmask),
+        'S':   flatten(np.load(base + 'salinity.npy'),    ocnmask),
+        'DIC': flatten(np.load(base + 'DIC.npy'),         ocnmask),
+        'AT':  flatten(np.load(base + 'TA.npy'),          ocnmask),
+        'Si':  flatten(np.load(base + 'silicate.npy'),    ocnmask),
+        'P':   flatten(np.load(base + 'PO4.npy'),         ocnmask),
     }
 
 
-def load_ncep_noaa(data_path: str) -> dict:
+def load_ncep_noaa(data_path: str, ocnmask: np.ndarray) -> dict:
     """Load pre-regridded NCEP/DOE and NOAA surface fields from disk.
 
-    Reads the .npy files produced by regrid.regrid_ncep_noaa(). All fields
-    are annual means on the OCIM2-48L surface grid (n_lat, n_lon).
+    Reads the .npy files produced by regrid.regrid_ncep_noaa(). Each 2D
+    surface field (n_lat, n_lon) is placed into the surface layer of a 3D
+    array (zero at all other depths) and flattened to a 1D ocean-only vector.
+    Subsurface values are 0, not NaN, so the vectors can be used directly in
+    build_A_matrix without further masking.
 
     Parameters
     ----------
     data_path : str
         Path to the data directory where data is stored in NCEP_DOE_Reanalysis_II/ and
         NOAA_Extended_Reconstruction_SST_V5/
+    ocnmask : np.ndarray
+        Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
 
     Returns
     -------
     dict with keys:
-        f_ice_2D : np.ndarray (n_lat, n_lon), annual mean ice fraction [0-1]
-        wspd_2D  : np.ndarray (n_lat, n_lon), annual mean wind speed at 10 m [m s^-1]
-        sst_2D   : np.ndarray (n_lat, n_lon), annual mean sea surface temperature [degrees C]
+        f_ice : np.ndarray (m,), annual mean ice fraction [0-1], 0 at depth
+        wspd  : np.ndarray (m,), annual mean wind speed at 10 m [m s^-1], 0 at depth
+        sst   : np.ndarray (m,), annual mean sea surface temperature [degrees C], 0 at depth
     """
+    def _surf_to_flat(field_2d):
+        field_3d = np.zeros(ocnmask.shape)
+        field_3d[:, :, 0] = field_2d
+        return flatten(field_3d, ocnmask)
+
     return {
-        'f_ice_2D': np.load(data_path + 'NCEP_DOE_Reanalysis_II/icec.npy'),
-        'wspd_2D':  np.load(data_path + 'NCEP_DOE_Reanalysis_II/wspd.npy'),
-        'sst_2D':   np.load(data_path + 'NOAA_Extended_Reconstruction_SST_V5/sst.npy'),
+        'f_ice': _surf_to_flat(np.load(data_path + 'NCEP_DOE_Reanalysis_II/icec.npy')),
+        'wspd':  _surf_to_flat(np.load(data_path + 'NCEP_DOE_Reanalysis_II/wspd.npy')),
+        'sst':   _surf_to_flat(np.load(data_path + 'NOAA_Extended_Reconstruction_SST_V5/sst.npy')),
     }
 
 
