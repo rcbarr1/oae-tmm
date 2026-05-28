@@ -104,8 +104,8 @@ def get_co2_scenario(scenario: str, times: np.ndarray,
     if scenario != 'none':
         atmospheric_CO2 = np.interp(times, CO2_data_years, CO2_data)
     else:
-        if times[0] >= 2020:
-            warnings.warn("'none' scenario selected but times start at or after 2020. "
+        if times[0] > 2022:
+            warnings.warn("'none' scenario selected but times start after 2022. "
                           "Canth is held constant based on a linear extrapolation from 2012-2022.")
         # hold CO2 constant at the value for the first time point
         atmospheric_CO2 = np.interp(times[0], CO2_data_years, CO2_data) * np.ones_like(times)

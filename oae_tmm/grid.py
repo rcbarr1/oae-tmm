@@ -140,7 +140,7 @@ def inpaint_nans_3d(array_3d: np.ndarray, iterations: int = 10,
 
     # optional land mask to persist NaNs in land areas
     if mask is not None:
-        land_mask = ~mask.astype(bool)  # True where land
+        land_mask = ~(mask > 0)  # True where land (accepts 0/1 integer or bool)
     else:
         land_mask = np.zeros_like(array_3d, dtype=bool)
 
@@ -159,7 +159,7 @@ def inpaint_nans_3d(array_3d: np.ndarray, iterations: int = 10,
         interpolated[update_mask] = new_vals[update_mask]
 
     if mask is not None:
-        interpolated[~mask.astype(bool)] = np.nan  # restore land to NaN
+        interpolated[land_mask] = np.nan  # restore land to NaN
 
     return interpolated
 
@@ -200,7 +200,7 @@ def inpaint_nans_2d(array_2d: np.ndarray, iterations: int = 10,
 
     # optional land mask to persist NaNs in land areas
     if mask is not None:
-        land_mask = ~mask.astype(bool)  # True where land
+        land_mask = ~(mask > 0)  # True where land (accepts 0/1 integer or bool)
     else:
         land_mask = np.zeros_like(array_2d, dtype=bool)
 
@@ -219,7 +219,7 @@ def inpaint_nans_2d(array_2d: np.ndarray, iterations: int = 10,
         interpolated[update_mask] = new_vals[update_mask]
 
     if mask is not None:
-        interpolated[~mask.astype(bool)] = np.nan  # restore land to NaN
+        interpolated[land_mask] = np.nan  # restore land to NaN
 
     return interpolated
 

@@ -75,7 +75,7 @@ def regrid_glodap(data_path: str, glodap_var: str, model_lat: np.ndarray,
     query_points = np.array([lat.ravel(), lon.ravel(), depth.ravel()]).T
     var = interp(query_points).reshape(depth.shape)
 
-    var = inpaint_nans_3d(var, mask=ocnmask.astype(bool))
+    var = inpaint_nans_3d(var, mask=ocnmask)
 
     # restore model longitudes
     model_lon[model_lon > 360] -= 360
@@ -161,7 +161,7 @@ def regrid_woa(data_path: str, woa_var: str, model_lat: np.ndarray,
     query_points = np.array([lat.ravel(), lon.ravel(), depth.ravel()]).T
     var = interp(query_points).reshape(depth.shape)
 
-    var = inpaint_nans_3d(var, mask=ocnmask.astype(bool))
+    var = inpaint_nans_3d(var, mask=ocnmask)
 
     if woa_var == 'S':
         np.save(data_path + 'WOA18/S.npy', var)
@@ -226,7 +226,7 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, model_lat: np.ndarray,
     query_points = np.array([lat.ravel(), lon.ravel()]).T
     var = interp(query_points).reshape(lon.shape)
 
-    var = inpaint_nans_2d(var, mask=ocnmask[:, :, 0].astype(bool))
+    var = inpaint_nans_2d(var, mask=ocnmask[:, :, 0])
 
     if ncep_var == 'icec':
         np.save(data_path + 'NCEP_DOE_Reanalysis_II/icec.npy', var)
@@ -290,7 +290,7 @@ def regrid_cobalt(cobalt_vrbl, model_lat: np.ndarray, model_lon: np.ndarray,
     query_points = np.array([lat.ravel(), lon.ravel(), depth.ravel()]).T
     var_interped = interp(query_points).reshape(depth.shape)
 
-    var_inpainted = inpaint_nans_3d(var_interped, mask=ocnmask.astype(bool))
+    var_inpainted = inpaint_nans_3d(var_interped, mask=ocnmask)
 
     np.save(data_path + 'COBALT_regridded/' + var_name + '.npy', var_inpainted)
     print('\tregrid complete in ' + str(round(time.time() - start_time, 3)) + ' s')
