@@ -59,7 +59,7 @@ def build_A_matrix(
     """Assemble the 2m+1 × 2m+1 sparse block matrix A.
 
     Encodes ocean carbon transport (TR) and linearized air-sea CO2 exchange
-    for state vector c = [∆xCO2, ∆DIC (m cells), ∆AT (m cells)]:
+    for state vector c = [∆xCO2 [µmol CO2 (µmol air)^-1], ∆DIC (m cells) [µmol kg^-1], ∆AT (m cells) [µmol kg^-1]]:
 
         A = [-gammax * K0 * Patm       | gammax * rho * R_C / beta_C | gammax * rho * R_A / beta_A]
             [-gammaC * K0 * Patm / rho | TR + gammaC * R_C / beta_C  | gammaC * R_A / beta_A      ]
@@ -82,7 +82,7 @@ def build_A_matrix(
     Parameters
     ----------
     TR : scipy.sparse matrix
-        OCIM2-48L transport matrix, shape (m, m).
+        OCIM2-48L transport matrix, shape (m, m) [yr^-1].
     k : np.ndarray
         CO2 piston velocity [m yr^-1], shape (m,). Zero for subsurface cells.
     f_ice : np.ndarray
@@ -124,7 +124,7 @@ def build_A_matrix(
     gammax = k * V * (1 - f_ice) / Ma / z1
     gammaC = -k * (1 - f_ice) / z1
 
-    # Block structure — c = [∆xCO2 (1), ∆DIC (m), ∆AT (m)], total length 2m+1:
+    # Block structure — c = [∆xCO2 (1) [µmol CO2 (µmol air)^-1], ∆DIC (m) [µmol kg^-1], ∆AT (m) [µmol kg^-1]], total length 2m+1:
     #
     #   A = [ A00: 1×1  | A01: 1×m  | A02: 1×m  ]  ← calculates d(∆xCO2)/dt
     #       [ A10: m×1  | A11: m×m  | A12: m×m  ]  ← calculates d(∆DIC)/dt
@@ -201,7 +201,8 @@ def solve_timestep(
     c_prev : np.ndarray
         State vector at the previous time step, shape (2m+1,).
     q : np.ndarray
-        Source/sink flux vector [tracer units yr^-1], shape (2m+1,).
+        Source/sink flux vector, shape (2m+1,). q[0] [µmol CO2 (µmol air)^-1 yr^-1],
+        q[1:(m+1)] [µmol DIC kg^-1 yr^-1], q[(m+1):] [µmol AT kg^-1 yr^-1].
     dt : float
         Time step [yr].
     solver_opts : dict, optional

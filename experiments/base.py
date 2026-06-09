@@ -276,7 +276,11 @@ class BaseExperiment:
         }
 
     def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
-        """CDR source/sink flux vector [tracer units yr^-1], shape (2m+1,). Must be overridden."""
+        """CDR source/sink flux vector, shape (2m+1,). Must be overridden.
+
+        q[0] [µmol CO2 (µmol air)^-1 yr^-1], q[1:(m+1)] [µmol DIC kg^-1 yr^-1],
+        q[(m+1):] [µmol AT kg^-1 yr^-1].
+        """
         raise NotImplementedError
 
     def _output_path(self, file_number: int) -> str:

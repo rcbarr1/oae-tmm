@@ -443,7 +443,7 @@ def run_experiment(experiment):
         
         # calculate rest of Nowicki et al. parameters
         beta_C = DIC_current/aqueous_CO2 # [unitless]
-        beta_A = AT/aqueous_CO2 # [unitless]
+        beta_A = AT_current/aqueous_CO2 # [unitless]
         K0 = aqueous_CO2/pCO2*rho # [µmol CO2 m-3 (µatm CO2)-1], in derivation this is defined in per volume units so used density to get there
         
         # calculate "A" matrix

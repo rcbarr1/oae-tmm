@@ -156,8 +156,8 @@ def write_simulation_step(
     i = len(ds.variables['time'])   # append at next position in unlimited dim
 
     ds.variables['time'][i]        = time
-    ds.variables['delxCO2'][i]     = np.float32(c[0] * 1e6)
-    ds.variables['xCO2_added'][i]  = np.float32(q_dt[0] * 1e6)
+    ds.variables['delxCO2'][i]     = np.float32(c[0] * 1e6)      # multiply by 1e6 to convert delxCO2 units from unitless [µatm CO2 / µatm air] or [µmol CO2 / µmol air]to ppm
+    ds.variables['xCO2_added'][i]  = np.float32(q_dt[0] * 1e6)   # multiply by 1e6 to convert delxCO2 units from unitless [µatm CO2 / µatm air] or [µmol CO2 / µmol air]to ppm
     ds.variables['delDIC'][i]      = make_3d(c[1:(m+1)], ocnmask).astype('float32')
     ds.variables['DIC_added'][i]   = make_3d(q_dt[1:(m+1)], ocnmask).astype('float32')
     ds.variables['delAT'][i]       = make_3d(c[(m+1):], ocnmask).astype('float32')

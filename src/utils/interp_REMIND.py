@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import PchipInterpolator
 
 #%% data
-co2_trajs = np.genfromtxt('./src/utils/pyTRACE/pyTRACE/data/CO2Trajectories_OLD.txt', 
+co2_trajs = np.genfromtxt('./pyTRACE/pyTRACE/data/CO2Trajectories_OLD.txt', 
                             delimiter='\t', 
                             dtype=None,
                             skip_header=0,
@@ -40,7 +40,7 @@ remind_co2_interp[2100::] = remind_co2_interp[2100]
 co2_trajs_interp = co2_trajs.copy()
 co2_trajs_interp[:,10] = remind_co2_interp
 
-np.savetxt('./src/utils/pyTRACE/pyTRACE/data/CO2Trajectories.txt', co2_trajs_interp, delimiter='\t')
+np.savetxt('./pyTRACE/pyTRACE/data/CO2Trajectories.txt', co2_trajs_interp, delimiter='\t')
 #%% adjust CO2 values via eqn. 5 from Carter et al. (2025)
 # https://essd.copernicus.org/articles/17/3073/2025/essd-17-3073-2025.html
 # this accounts for the fact there is incomplete air-sea gas exchange and a lag in ocean mixing time relative to the atmosphere
@@ -52,7 +52,7 @@ remind_co2_interp_adj[0:65] = remind_co2_interp[0:65] # keep values <65 unadjust
 remind_co2_interp_adj[65::] = remind_co2_interp[65:] - 0.144 * (remind_co2_interp[65:] - remind_co2_interp[:-65])
 
 # pull in rest of adjusted data
-co2_trajs_adj = np.genfromtxt('./src/utils/pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted_OLD.txt', 
+co2_trajs_adj = np.genfromtxt('./pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted_OLD.txt', 
                             delimiter='\t', 
                             dtype=None,
                             skip_header=0,
@@ -65,7 +65,7 @@ co2_trajs_adj = np.vstack(co2_trajs_adj.tolist())
 co2_trajs_adj = np.hstack((co2_trajs_adj, np.expand_dims(remind_co2_interp_adj, axis=1)))
 
 #%% save to CO2 adjusted trajectories file
-np.savetxt('./src/utils/pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted.txt', co2_trajs_adj, delimiter='\t')
+np.savetxt('./pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted.txt', co2_trajs_adj, delimiter='\t')
 
 # %% plot results
 fig = plt.figure(figsize=(5,5), dpi=200)
@@ -83,7 +83,7 @@ ax.legend()
 
 #%% make sure everything looks good by plotting all co2 trajectories & adjusted trajectories
 # trajectories
-co2_trajs_all = np.genfromtxt('./src/utils/pyTRACE/pyTRACE/data/CO2Trajectories.txt',
+co2_trajs_all = np.genfromtxt('./pyTRACE/pyTRACE/data/CO2Trajectories.txt',
                               delimiter='\t', 
                               dtype=None,
                               skip_header=0,
@@ -110,7 +110,7 @@ ax.set_ylabel('Atmospheric CO$_{2}$ Concentration (ppm)')
 ax.legend()
 
 # adjusted trajectories
-co2_trajs_adj_all = np.genfromtxt('./src/utils/pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted.txt',
+co2_trajs_adj_all = np.genfromtxt('./pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted.txt',
                               delimiter='\t', 
                               dtype=None,
                               skip_header=0,

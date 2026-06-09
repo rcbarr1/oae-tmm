@@ -9,7 +9,7 @@ result into the pyTRACE CO2 trajectory files:
     pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted.txt (adjusted)
 
 Run once when updating the REMIND scenario; these files are read by
-oae_tmm.chemistry.get_co2_scenario at experiment time.
+pyTRACE at experiment time.
 
 Reference: Carter et al. (2025), ESSD, https://doi.org/10.5194/essd-17-3073-2025
 """

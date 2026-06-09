@@ -21,20 +21,20 @@ TR = TR['TR']
 
 # open up rest of data associated with transport matrix
 model_data = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')
-ocnmask = model_data['ocnmask'].to_numpy()
+ocnmask = model_data['ocnmask'].to_numpy().transpose(2, 1, 0)  # (depth,lon,lat) -> (lat,lon,depth)
 
 model_depth = model_data['tz'].to_numpy()[:, 0, 0] # m below sea surface
 model_lon = model_data['tlon'].to_numpy()[0, :, 0] # ºE
 model_lat = model_data['tlat'].to_numpy()[0, 0, :] # ºN
 
 #%% regrid GLODAP data
-p2.regrid_glodap(data_path, 'TCO2', model_depth, model_lat, model_lon, ocnmask)
-p2.regrid_glodap(data_path, 'TAlk', model_depth, model_lat, model_lon, ocnmask)
-p2.regrid_glodap(data_path, 'pHtsinsitutp', model_depth, model_lat, model_lon, ocnmask)
-p2.regrid_glodap(data_path, 'temperature', model_depth, model_lat, model_lon, ocnmask)
-p2.regrid_glodap(data_path, 'salinity', model_depth, model_lat, model_lon, ocnmask)
-p2.regrid_glodap(data_path, 'silicate', model_depth, model_lat, model_lon, ocnmask)
-p2.regrid_glodap(data_path, 'PO4', model_depth, model_lat, model_lon, ocnmask)
+p2.regrid_glodap(data_path, 'TCO2', model_lat, model_lon, model_depth, ocnmask)
+p2.regrid_glodap(data_path, 'TAlk', model_lat, model_lon, model_depth, ocnmask)
+p2.regrid_glodap(data_path, 'pHtsinsitutp', model_lat, model_lon, model_depth, ocnmask)
+p2.regrid_glodap(data_path, 'temperature', model_lat, model_lon, model_depth, ocnmask)
+p2.regrid_glodap(data_path, 'salinity', model_lat, model_lon, model_depth, ocnmask)
+p2.regrid_glodap(data_path, 'silicate', model_lat, model_lon, model_depth, ocnmask)
+p2.regrid_glodap(data_path, 'PO4', model_lat, model_lon, model_depth, ocnmask)
 
 #%% regrid NCEP/DOE reanalysis II data
 p2.regrid_ncep_noaa(data_path, 'icec', model_lat, model_lon, ocnmask)

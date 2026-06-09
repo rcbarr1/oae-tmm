@@ -2,14 +2,11 @@
 Physical parameterization functions for oae-tmm.
 
 These functions implement Wanninkhof (2014) gas transfer physics (Schmidt
-number, piston velocity) and retrieve atmospheric CO2 concentrations for SSP
-emissions scenarios. They do not load observational data from disk (except
-get_co2_scenario, which reads a small text file bundled with pyTRACE) and do
+number, piston velocity). They do not load observational data from disk and do
 not call the PETSc solver.
 """
 
 import numpy as np
-import warnings
 
 
 def schmidt_number(gas: str, temperature: np.ndarray) -> np.ndarray:
@@ -48,69 +45,6 @@ def schmidt_number(gas: str, temperature: np.ndarray) -> np.ndarray:
     Sc = a + (b * temperature) + (c * temperature**2) + (d * temperature**3) + (e * temperature**4)
 
     return Sc
-
-
-def get_co2_scenario(scenario: str, times: np.ndarray,
-                     co2_data_path: str = './pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted.txt') -> np.ndarray:
-    """Return atmospheric CO2 concentrations for a given SSP scenario and times.
-
-    Interpolates from the pyTRACE CO2 trajectory file (originally from the
-    University of Melbourne greenhouse gas dataset) to the requested times.
-    For the 'none' scenario, CO2 is held constant at the value corresponding
-    to the first time point — this represents a fixed preindustrial-ish
-    baseline with no future emissions change.
-
-    Note: historical data and SSP scenarios differ by less than 1 ppm even
-    before the SSPs formally diverge in 2016.
-
-    Available scenarios: 'none', 'ssp119', 'ssp126', 'ssp245', 'ssp370',
-    'ssp370_lowNTCF', 'ssp434', 'ssp460', 'ssp534_OS'.
-
-    Data source: https://greenhousegases.science.unimelb.edu.au/#!/ghg?mode=downloads
-    (via pyTRACE CO2TrajectoriesAdjusted.txt)
-
-    Note on co2_data_path: this points to pyTRACE/ at the repo root using a
-    path relative to the working directory. Update if run from a different cwd.
-
-    Parameters
-    ----------
-    scenario : str
-        Name of the emissions scenario. One of: 'none', 'ssp119', 'ssp126',
-        'ssp245', 'ssp370', 'ssp370_lowNTCF', 'ssp434', 'ssp460', 'ssp534_OS'.
-    times : np.ndarray
-        1D array of times [decimal years CE] at which to return CO2.
-    co2_data_path : str, optional
-        Path to CO2TrajectoriesAdjusted.txt. Defaults to the location inside
-        the pyTRACE submodule.
-
-    Returns
-    -------
-    np.ndarray
-        1D array of atmospheric CO2 concentrations [µmol CO2 (mol air)^-1, i.e. ppm],
-        same length as times.
-    """
-    scenarios = {
-        'none': 1, 'ssp119': 2, 'ssp126': 3, 'ssp245': 4, 'ssp370': 5,
-        'ssp370_lowNTCF': 6, 'ssp434': 7, 'ssp460': 8, 'ssp534_OS': 9,
-    }
-
-    if scenario not in scenarios:
-        raise ValueError(f"Invalid scenario {scenario!r}. Must be one of: {', '.join(scenarios.keys())}")
-
-    data = np.loadtxt(co2_data_path)
-    CO2_data_years = data[:, 0]
-    CO2_data = data[:, scenarios[scenario]]
-
-    if scenario != 'none':
-        atmospheric_CO2 = np.interp(times, CO2_data_years, CO2_data)
-    else:
-        if times[0] > 2022:
-            warnings.warn("'none' scenario selected but times start after 2022. "
-                          "Canth is held constant based on a linear extrapolation from 2012-2022.")
-        # hold CO2 constant at the value for the first time point
-        atmospheric_CO2 = np.interp(times[0], CO2_data_years, CO2_data) * np.ones_like(times)
-
-    return atmospheric_CO2
 
 
 def calc_piston_velocity(sst_2D: np.ndarray, wspd_2D: np.ndarray) -> np.ndarray:

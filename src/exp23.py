@@ -189,10 +189,10 @@ def set_experiment_parameters(test=False):
                     for scenario in ['none']:
                             experiments.append({'exp_t': exp_t,
                                                 'q_AT_locations_mask': q_AT_depth * q_AT_latlon, # combine depth and lat/lon masks into one
-                                                'scenario': 'ssp126',
+                                                'scenario': 'none',
                                                 'start_year': 2002,
                                                 'start_CDR' : 2002,
-                                                'tag': 'TEST'})
+                                                'tag': 'TEST_none'})
     # real experiments
     else:
         for exp_t, exp_t_name in zip(exp_ts, exp_t_names):
@@ -457,7 +457,7 @@ def run_experiment(experiment):
         
         # calculate rest of Nowicki et al. parameters
         beta_C = DIC_current/aqueous_CO2 # [unitless]
-        beta_A = AT/aqueous_CO2 # [unitless]
+        beta_A = AT_current/aqueous_CO2 # [unitless]
         K0 = aqueous_CO2/pCO2*rho # [µmol CO2 m-3 (µatm CO2)-1], in derivation this is defined in per volume units so used density to get there
         
         # calculate "A" matrix

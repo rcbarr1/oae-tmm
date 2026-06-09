@@ -21,12 +21,10 @@ OCIM2-48L grid, NaN at land cells.
 Note on the 'none' scenario
 ----------------------------
 'none' is NOT the TRACE historical scenario. In the experiment framework,
-'none' means atmospheric CO2 is frozen at the first time step (no future
-emissions perturbation), as implemented in chemistry.get_co2_scenario.
-For Canth initial conditions, however, both functions still need a Canth
-estimate — they use pyTRACE/TRACE scenario 1, which is a linear
-extrapolation of the historical trend from 2012–2022. This is separate
-from the atmospheric CO2 forcing used during the simulation.
+'none' means Canth is held fixed at the start year (no future Canth update
+in the time loop). Both functions still need a Canth estimate — they use
+pyTRACE/TRACE scenario 1, which is a linear extrapolation of the historical
+trend from 2012–2022.
 """
 
 import warnings
@@ -174,7 +172,7 @@ def calculate_canth(scenario, year, T_3D, S_3D, ocnmask, lat, lon, depth):
         'none' maps to pyTRACE scenario 1 (historical linear extrapolation
         from 2012–2022) for Canth estimation only — it does NOT mean the
         atmospheric CO2 is frozen here. Freezing CO2 is handled separately
-        by chemistry.get_co2_scenario at experiment time.
+        in the time loop (scenario != 'none' check in BaseExperiment.run).
     year : float
         Year to evaluate anthropogenic carbon at [decimal years CE].
     T_3D : np.ndarray

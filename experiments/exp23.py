@@ -72,6 +72,8 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     if test:
         time_configs = [('test', np.arange(0, 6, 1.0))]
         scenarios    = ['none']
+        start_year   = 2002
+        start_CDR    = 2002
     else:
         time_configs = [
             ('t0', np.arange(0, 20, 1.0)),    # annual steps
