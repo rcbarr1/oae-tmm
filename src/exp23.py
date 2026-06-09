@@ -189,10 +189,10 @@ def set_experiment_parameters(test=False):
                     for scenario in ['none']:
                             experiments.append({'exp_t': exp_t,
                                                 'q_AT_locations_mask': q_AT_depth * q_AT_latlon, # combine depth and lat/lon masks into one
-                                                'scenario': 'none',
+                                                'scenario': 'ssp126',
                                                 'start_year': 2002,
                                                 'start_CDR' : 2002,
-                                                'tag': 'TEST_none'})
+                                                'tag': 'TEST_ssp126'})
     # real experiments
     else:
         for exp_t, exp_t_name in zip(exp_ts, exp_t_names):

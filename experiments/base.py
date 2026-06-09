@@ -175,25 +175,11 @@ class BaseExperiment:
         self.k     = chemistry.calc_piston_velocity(self.surf['sst'], self.surf['wspd'])
 
         # preindustrial DIC: GLODAP DIC minus Canth at 2002 (TRACE historical)
-        Canth_2002 = flatten(
-            trace.interp_trace(
-                self.cfg.data_path, 2002, 'none',
-                self.grid['model_lat'], self.grid['model_lon'],
-                self.grid['model_depth'], ocnmask,
-            ),
-            ocnmask,
-        )
+        Canth_2002 = flatten(self._calc_canth(2002, 'none'), ocnmask)
         self.DIC_preind = glodap['DIC'] - Canth_2002
 
         # Canth at the simulation start year (updated each step during run)
-        self.Canth = flatten(
-            trace.interp_trace(
-                self.cfg.data_path, self.cfg.start_year, self.cfg.scenario,
-                self.grid['model_lat'], self.grid['model_lon'],
-                self.grid['model_depth'], ocnmask,
-            ),
-            ocnmask,
-        )
+        self.Canth = flatten(self._calc_canth(self.cfg.start_year, self.cfg.scenario), ocnmask)
 
         # preindustrial pH from GLODAP DIC_preind + GLODAP AT
         # (used in subclasses for CDR targeting)
@@ -275,6 +261,18 @@ class BaseExperiment:
             'AT_current':  AT_current,
         }
 
+    def _calc_canth(self, year: float, scenario: str) -> np.ndarray:
+        """Return 3D Canth [µmol kg^-1] at the given year and scenario.
+
+        Default: interpolates the pre-computed TRACE gridded product. Override
+        in subclasses to use direct pyTRACE calls instead (e.g. Exp22).
+        """
+        return trace.interp_trace(
+            self.cfg.data_path, year, scenario,
+            self.grid['model_lat'], self.grid['model_lon'],
+            self.grid['model_depth'], self.grid['ocnmask'],
+        )
+
     def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
         """CDR source/sink flux vector, shape (2m+1,). Must be overridden.
 
@@ -342,14 +340,7 @@ class BaseExperiment:
 
                 # update Canth from TRACE for the current calendar year
                 if self.cfg.scenario != 'none':
-                    self.Canth = flatten(
-                        trace.interp_trace(
-                            self.cfg.data_path, t_current, self.cfg.scenario,
-                            self.grid['model_lat'], self.grid['model_lon'],
-                            self.grid['model_depth'], ocnmask,
-                        ),
-                        ocnmask,
-                    )
+                    self.Canth = flatten(self._calc_canth(t_current, self.cfg.scenario), ocnmask)
 
                 # recompute carbonate chemistry from current state
                 chem = self._calc_step_chemistry(c)

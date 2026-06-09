@@ -1,15 +1,14 @@
 """
-Exp23: Maximum alkalinity addition targeting preindustrial surface pH.
+Exp22: Maximum alkalinity addition targeting preindustrial surface pH.
 
-At each timestep, solves for the AT needed to return every surface cell
-(within the mixed layer) to its preindustrial pH and applies that as the
-CDR flux. NaOH is assumed (no DIC added). Supports multiple time-step
-resolutions and SSP scenarios.
+Same CDR logic as Exp23 but calls pyTRACE directly at every ocean grid cell
+to compute anthropogenic carbon, rather than interpolating the pre-computed
+TRACE gridded product.
 
 CLI usage:
-    python -m experiments.exp23 --exp-id 0
-    python -m experiments.exp23 --list
-    python -m experiments.exp23 --test
+    python -m experiments.exp22 --exp-id 0
+    python -m experiments.exp22 --list
+    python -m experiments.exp22 --test
 """
 
 import gc
@@ -20,18 +19,34 @@ import numpy as np
 import PyCO2SYS as pyco2
 
 from experiments.base import BaseExperiment, ExperimentConfig, run_cli
-from oae_tmm import loaders
+from oae_tmm import loaders, trace
 from oae_tmm.grid import flatten, make_3d
 
 
-class Exp23(BaseExperiment):
-    """Maximum alkalinity addition to restore preindustrial surface pH.
+class Exp22(BaseExperiment):
+    """Maximum alkalinity addition with direct pyTRACE calls for Canth.
 
-    At each timestep after start_CDR, solves for the AT required to return
-    each masked surface cell to preindustrial pH given the current DIC, then
-    applies that as a flux. Cells where AT_desired < AT_current are skipped
-    (no AT removal). No DIC is added (NaOH assumption).
+    Identical CDR logic to Exp23 (restore preindustrial surface pH via NaOH
+    addition within the mixed layer), but computes anthropogenic carbon by
+    calling the pyTRACE neural network directly at each timestep rather than
+    reading the pre-computed TRACE gridded product.
     """
+
+    def setup(self):
+        """Load T_3D and S_3D for pyTRACE, then delegate to BaseExperiment.setup()."""
+        base = self.cfg.data_path + 'GLODAPv2.2016b.MappedProduct/'
+        self.T_3D = np.load(base + 'temperature.npy')
+        self.S_3D = np.load(base + 'salinity.npy')
+        super().setup()
+
+    def _calc_canth(self, year: float, scenario: str) -> np.ndarray:
+        """Compute Canth by calling pyTRACE directly at every ocean grid cell."""
+        return trace.calculate_canth(
+            scenario, year, self.T_3D, self.S_3D,
+            self.grid['ocnmask'],
+            self.grid['model_lat'], self.grid['model_lon'],
+            self.grid['model_depth'],
+        )
 
     def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
         """Add AT to restore preindustrial pH at masked cells; no DIC change (NaOH)."""
@@ -53,21 +68,16 @@ class Exp23(BaseExperiment):
 
 
 def build_experiments(data_path: str, output_path: str, test: bool = False) -> list:
-    """Return a list of Exp23 instances covering all parameter combinations.
-
-    Loads the minimal OCIM grid data needed to construct the mixed-layer
-    addition mask, then builds one Exp23 per (time resolution, scenario) pair.
-    """
+    """Return a list of Exp22 instances covering all parameter combinations."""
     grid    = loaders.load_ocim(data_path)
     ocnmask = grid['ocnmask']
 
-    # mixed-layer mask: 1 where grid cell bottom depth < local MLD
     grid_cell_depth_3d = make_3d(grid['grid_cell_depth'], ocnmask)
-    mldmask    = (grid_cell_depth_3d < grid['mld'][:, :, None]).astype(int)
-    q_AT_mask  = flatten(mldmask * ocnmask, ocnmask)
+    mldmask   = (grid_cell_depth_3d < grid['mld'][:, :, None]).astype(int)
+    q_AT_mask = flatten(mldmask * ocnmask, ocnmask)
 
     start_year = 2020.0
-    start_CDR  = 2020.0  # same as start_year: CDR begins immediately
+    start_CDR  = 2020.0
 
     if test:
         time_configs = [('test', np.arange(0, 6, 1.0))]
@@ -76,8 +86,8 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
         start_CDR    = 2002
     else:
         time_configs = [
-            ('t0', np.arange(0, 20, 1.0)),    # annual steps
-            ('t1', np.arange(0, 20, 1/12)),   # monthly steps
+            ('t0', np.arange(0, 20, 1.0)),
+            ('t1', np.arange(0, 20, 1/12)),
         ]
         scenarios = ['none', 'ssp126', 'ssp245', 'ssp534_OS']
 
@@ -88,21 +98,21 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
             tag = f'{tag_date}_{t_name}_{scenario}'
             cfg = ExperimentConfig(
                 data_path          = data_path,
-                output_path        = output_path + f'exp23_{tag}.nc',
+                output_path        = output_path + f'exp22_{tag}.nc',
                 scenario           = scenario,
                 start_year         = start_year,
                 times              = times,
                 max_steps_per_file = 2000,
                 start_CDR          = start_CDR,
                 q_AT_mask          = q_AT_mask,
-                attrs              = {'experiment': 'exp23', 'scenario': scenario, 'tag': tag},
+                attrs              = {'experiment': 'exp22', 'scenario': scenario, 'tag': tag},
             )
-            experiments.append(Exp23(cfg))
+            experiments.append(Exp22(cfg))
     return experiments
 
 
 def main():
-    run_cli(build_experiments, 'Exp23: max AT addition to restore preindustrial pH')
+    run_cli(build_experiments, 'Exp22: max AT addition to restore preindustrial pH (direct pyTRACE)')
 
 
 if __name__ == '__main__':
