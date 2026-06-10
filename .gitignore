@@ -6,11 +6,12 @@ notes/
 outputs/
 PyESPER/
 writing/
-src/utils/pyTRACE/
+pyTRACE/
 
 # ignore temporary or system files
 *.pyc
 __pycache__/
+*.egg-info/
 .DS_Store
 Dockerfile
 .dockerignore
@@ -25,4 +26,4 @@ RHS_1hr.mat
 RHS_1yr.mat
 *.pth
 *.save
-*.md
+refactoring_plan.md
