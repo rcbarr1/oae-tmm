@@ -169,15 +169,14 @@ def set_experiment_parameters(test=False):
 
     # test experiment
     if test:
-        for exp_t in [np.arange(0,6,1)]: # 5 years, dt = 1 year
-            for q_AT_depth in q_AT_depths:
-                for q_AT_latlon in q_AT_latlons:
-                    for scenario in ['none']:
-                        experiments.append({'exp_t': exp_t,
-                                            'q_AT_locations_mask': q_AT_depth * q_AT_latlon, # combine depth and lat/lon masks into one
-                                            'scenario': 'ssp126',
-                                            'start_year': 2002,
-                                            'tag': 'TEST'})
+        for q_AT_depth in q_AT_depths:
+            for q_AT_latlon in q_AT_latlons:
+                experiments.append({'exp_t': np.arange(0, 5, dt2), # 5 years, monthly
+                                    'q_AT_locations_mask': q_AT_depth * q_AT_latlon,
+                                    'scenario': 'none',
+                                    'start_year': start_year,
+                                    'k_scale_factor': 1.0,
+                                    'tag': 'TEST'})
     # real experiments
     else:
         for exp_t, exp_t_name in zip(exp_ts, exp_t_names):
@@ -641,13 +640,13 @@ def main():
     if args.list:
         print(f"total experiments: {len(experiments)}")
         for i, experiment in enumerate(experiments):
-            print(f"  {i}: exp25_{experiment['tag']}")
+            print(f"  {i}: exp26_{experiment['tag']}")
         return
 
     # handle test mode (runs first experiment only)
     if test:
         experiment = experiments[0]
-        print(f"running test experiment: LCA1_{experiment['tag']}")
+        print(f"running test experiment: exp26_{experiment['tag']}")
         run_experiment(experiment)
         return
 

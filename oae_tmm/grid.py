@@ -13,6 +13,8 @@ OCIM2-48L array conventions used throughout:
   - ocnmask: integer array of shape (n_lat, n_lon, n_depth), 1 = ocean, 0 = land
 """
 
+import warnings
+
 import numpy as np
 from scipy.ndimage import convolve
 from tqdm import tqdm
@@ -127,6 +129,19 @@ def inpaint_nans_3d(array_3d: np.ndarray, iterations: int = 10,
     np.ndarray
         3D array with NaN values filled at ocean cells.
     """
+    if iterations == 0:
+        warnings.warn(
+            'inpaint_nans_3d called with iterations=0: NaN cells will be replaced by the '
+            'global array mean but no neighbour averaging will occur.',
+            UserWarning, stacklevel=2,
+        )
+    if np.all(np.isnan(array_3d)):
+        warnings.warn(
+            'inpaint_nans_3d received an all-NaN array: no valid data exists to propagate, '
+            'returning all-NaN.',
+            UserWarning, stacklevel=2,
+        )
+
     interpolated = array_3d.copy()
 
     # 6-connected stencil: one neighbor in each axis direction, no diagonals
@@ -186,6 +201,19 @@ def inpaint_nans_2d(array_2d: np.ndarray, iterations: int = 10,
     np.ndarray
         2D array with NaN values filled at ocean cells.
     """
+    if iterations == 0:
+        warnings.warn(
+            'inpaint_nans_2d called with iterations=0: NaN cells will be replaced by the '
+            'global array mean but no neighbour averaging will occur.',
+            UserWarning, stacklevel=2,
+        )
+    if np.all(np.isnan(array_2d)):
+        warnings.warn(
+            'inpaint_nans_2d received an all-NaN array: no valid data exists to propagate, '
+            'returning all-NaN.',
+            UserWarning, stacklevel=2,
+        )
+
     interpolated = array_2d.copy()
 
     # 4-connected stencil: up, down, left, right — no diagonals
