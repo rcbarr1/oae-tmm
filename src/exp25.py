@@ -4,7 +4,7 @@
 """
 Created on Thu Jan 15 2026
 
-EXP24: Attempting to replicate map of relative efficiency from Yamamoto et al., 2024
+EXP25: Attempting to replicate map of relative efficiency from Yamamoto et al., 2024
 https://iopscience.iop.org/article/10.1088/1748-9326/ad7477/meta
 - experimental setup: removing DIC at rate of 1 μmol kg−1 yr−1 for first 30 days, then run for 100 years
 - daily time steps for first 90 days, then monthly until year 5, then annual until year 100
@@ -154,7 +154,9 @@ def set_experiment_parameters(test=False):
 
     # test experiment
     if test:
-        for exp_t in [np.arange(0,6,1)]: # 5 years, dt = 1 year
+        t0 = np.arange(0, 0.25, 1/360)  # daily for 90 days (covers 30-day CDR window)
+        t1 = np.arange(0.25, 1, 1/12)   # monthly for rest of year 1
+        for exp_t in [np.concatenate((t0, t1))]:
             for ocn_idx, grid_cell_idxs in zip([ocn_idxs[0]], [grid_cell_idxs[0]]):
                 for scenario in ['none']:
                     experiments.append({'exp_t': exp_t,
