@@ -160,46 +160,46 @@ def set_experiment_parameters(test=False):
     ocn_idxs = np.argwhere(q_AT_locs == 1) # find the indices where mask == 1
     grid_cell_idxs = np.arange(len(q_AT_locs[q_AT_locs == 1]))
     
-    # with starting year
-    start_year = 2050 # year to start simulation
-    start_CDR = 2050 # year to start CDR deployment
+    # with starting years
+    start_years = [2030, 2050]
 
     # with emissions scenario
-    scenarios = ['REMIND'] 
+    scenarios = ['REMIND']
 
-    # with magnitude of addition (1 metric ton OH- vs. 5 metric tons OH-)
-    AT_amounts = [1]
-    exp_names = ['1ton_2050']
-    
-    # set up experiments to run 
+    # with magnitude of addition
+    AT_amounts = [0.001, 1, 5]    # metric tons: 1 kg, 1 ton, 5 tons
+    AT_labels  = ['1kg', '1ton', '5ton']
+
+    # set up experiments to run
     experiments = []
 
     # test experiment
     if test:
-        for exp_t in [np.arange(0,6,1)]: # 5 years, dt = 1 year
+        for exp_t in [np.concatenate([np.arange(0, 1, 1/12), np.arange(1, 6, 1)])]: # monthly yr 0-1 (triggers AT pulse), then annual
             for ocn_idx, grid_cell_idxs in zip([ocn_idxs[0]], [grid_cell_idxs[0]]):
-                for scenario in ['none']:
+                for scenario in ['REMIND']:
                     for AT_amount in [1]:
                         experiments.append({'exp_t': exp_t,
                                             'q_AT_location': ocn_idx,
                                             'scenario': scenario,
                                             'AT_amount': AT_amount,
-                                            'start_year': 2002,
-                                            'start_CDR' : 2002,
+                                            'start_year': 2050,
+                                            'start_CDR' : 2050,
                                             'tag': 'TEST'})
     # real experiments
     else:
         for exp_t in exp_ts:
             for ocn_idx, grid_cell_idx in zip(ocn_idxs, grid_cell_idxs):
                 for scenario in scenarios:
-                    for AT_amount, exp_name in zip(AT_amounts, exp_names):
-                        experiments.append({'exp_t': exp_t,
-                                            'q_AT_location': ocn_idx,
-                                            'scenario': scenario,
-                                            'AT_amount': AT_amount,
-                                            'start_year' : start_year,
-                                            'start_CDR' : start_CDR,
-                                            'tag': datetime.now().strftime("%Y-%m-%d") + '_' + exp_name + '_' + f'{grid_cell_idx:05d}'})
+                    for start_year in start_years:
+                        for AT_amount, AT_label in zip(AT_amounts, AT_labels):
+                            experiments.append({'exp_t': exp_t,
+                                                'q_AT_location': ocn_idx,
+                                                'scenario': scenario,
+                                                'AT_amount': AT_amount,
+                                                'start_year' : start_year,
+                                                'start_CDR' : start_year,
+                                                'tag': datetime.now().strftime("%Y-%m-%d") + f'_{AT_label}_{start_year}_{grid_cell_idx:05d}'})
     return experiments
 
 def run_experiment(experiment):

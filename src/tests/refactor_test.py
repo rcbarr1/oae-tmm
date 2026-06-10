@@ -22,8 +22,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 
-OLD_OUTPUT = './outputs/exp23_TEST_ssp126_000.nc'                    # from src/expXX.py
-NEW_OUTPUT = './outputs/exp23_2026-06-09_test_ssp126_000.nc'  # from experiments/expXX.py
+OLD_OUTPUT = './outputs/LCA1_TEST_000.nc'                    # from src/expXX.py
+NEW_OUTPUT = './outputs/LCA1_2026-06-09_nearshore_colombia_000.nc'  # from experiments/expXX.py
 
 RTOL = 1e-4   # relative tolerance for tracer comparison (float32 precision)
 ATOL = 1e-3   # absolute tolerance [µmol kg-1]; handles near-zero values where
