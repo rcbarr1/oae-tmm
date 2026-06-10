@@ -1,4 +1,4 @@
-name: project2
+name: oae-tmm
 channels:
   - conda-forge
   - defaults

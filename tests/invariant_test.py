@@ -25,7 +25,7 @@ by either weight vector gives exact conservation at every step, up to the
 tolerance of the linear solver.
 
 Usage:
-    python src/tests/invariant_test.py
+    python tests/invariant_test.py
 """
 #%%
 import os

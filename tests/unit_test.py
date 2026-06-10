@@ -17,7 +17,7 @@ Coverage:
   base.BaseExperiment._output_path — single-file passthrough, multi-file suffix formatting
 
 Usage:
-    python src/tests/unit_test.py
+    python tests/unit_test.py
 """
 #%%
 import os
