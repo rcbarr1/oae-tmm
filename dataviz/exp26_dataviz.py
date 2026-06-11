@@ -9,82 +9,50 @@ DATA VIZ FOR EXP26: monte carlo simulation testing air-sea gas exchange paramete
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from oae_tmm.loaders import load_mat
-from oae_tmm.grid import get_depth_idx
+from dataviz.dataviz import broadcast_to_dataset
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib as mpl
-import PyCO2SYS as pyco2
-from tqdm import tqdm
 
 # load model architecture
 data_path = './data/'
-# output_path = './outputs/'
-output_path = '/Volumes/LaCie/outputs/'
+output_path = './outputs/'
+# output_path = '/Volumes/LaCie/outputs/'
 
-# load transport matrix (OCIM2-48L, from Holzer et al., 2021)
-# transport matrix is referred to as "A" vector in John et al., 2020 (AWESOME OCIM)
-TR = load_mat(data_path + 'OCIM2_48L_base/OCIM2_48L_base_transport.mat')
-TR = TR['TR']
-
-# open up rest of data associated with transport matrix
+# open data associated with transport matrix
 model_data = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')
 ocnmask = model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_numpy()
 
-model_lat = model_data['tlat'].isel(depth=0, longitude=0).to_numpy()    # ºN
-model_lon = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()     # ºE
-model_depth = model_data['tz'].isel(longitude=0, latitude=0).to_numpy() # m below sea surface
+model_lat  = model_data['tlat'].isel(depth=0, longitude=0).to_numpy()    # ºN
+model_lon  = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()     # ºE
 model_vols = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy() # m^3
 
-# some other important numbers
-grid_cell_depth = model_data['wz'].transpose('latitude', 'longitude', 'depth').to_numpy() # depth of model layers (need bottom of grid cell, not middle) [m]
-z1 = grid_cell_depth[0, 0, 1] # depth of first model layer [m]
-rho = 1025 # seawater density for volume to mass [kg m-3]
-surf_idx = get_depth_idx(ocnmask,0) # indicies of surface grid cells in 3D array flattened by p2.flatten()
-
 model_data.close()
-
-# rules for saving files
-t_per_file = 2000 # number of time steps 
-
-# calculate when new layers start (for line plots)
-new_layer_idx = np.zeros(len(model_depth))
-for i in range(len(model_depth)):
-    new_layer_idx[i] = int(np.nansum(ocnmask[i,:,:]))
-new_layer_idx = np.cumsum(new_layer_idx)
+rho = 1025  # seawater density [kg m-3]
 
 #%% set experiments we are interested in plotting
 num_mc = 144
-experiment_names = []
-
-for i in range(num_mc):
-    experiment_name = 'exp26_2026-03-28_t1_' + f'{i:05d}'
-    experiment_names.append(experiment_name)
+experiment_names = ['exp26_2026-03-28_t1_' + f'{i:05d}' for i in range(num_mc)]
 
 # %% calculate global ocean average CDR efficiency (eta = delDIC / delAT) for each run after 20 years
 etas = np.zeros(num_mc)
 
-# use xarray to open metadata of files of interest
-for exp_idx in range(len(experiment_names)):
-    ds = xr.open_mfdataset(
-        output_path + experiment_names[exp_idx] + '_*.nc',
-        combine='by_coords',
-        chunks={'time': 10},
-        parallel=True)
-    
-    # sum across all grid cells to get total change in AT and DIC
-    model_vols_xr = xr.DataArray(model_vols, # broadcast model volumes to xarray to convert from concentration in per kg to total
-                                 dims=["lat", "lon", "depth"],
-                                 coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
-    delDIC = ds['delDIC'] * model_vols_xr * rho # convert from µmol/kg to µmol
-    delAT = ds['delAT'] * model_vols_xr * rho # convert from µmol/kg to µmol
+for exp_idx, experiment_name in enumerate(experiment_names):
+    with xr.open_mfdataset(
+            output_path + experiment_name + '_*.nc',
+            combine='by_coords',
+            chunks={'time': 10},
+            parallel=True) as ds:
 
-    eta_full_ocean = delDIC.isel(time=-1).sum() / delAT.isel(time=-1).sum()
-    etas[exp_idx] = eta_full_ocean * 100
+        model_vols_xr = broadcast_to_dataset(model_vols, ds)
+        delDIC = ds['delDIC'] * model_vols_xr * rho  # µmol/kg → µmol
+        delAT  = ds['delAT']  * model_vols_xr * rho  # µmol/kg → µmol
 
-eta_avg = np.mean(etas)
-eta_std = np.std(etas)
+        eta_full_ocean = delDIC.isel(time=-1).sum() / delAT.isel(time=-1).sum()
+        etas[exp_idx] = float(eta_full_ocean) * 100
+
+eta_avg = float(np.mean(etas))
+eta_std = float(np.std(etas))
 
 # plot histogram of etas
 fig = plt.figure(figsize=(8, 8), dpi=200)
@@ -117,7 +85,7 @@ plt.show()
 #         combine='by_coords',
 #         chunks={'time': 10},
 #         parallel=True)
-    
+
 #     eta_surf = ds['delDIC'].isel(depth=0, time=-1) / ds['delAT'].isel(depth=0, time=-1)
 #     surf_ocn_etas[exp_idx, :, :] = eta_surf * 100
 

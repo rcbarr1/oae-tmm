@@ -297,5 +297,3 @@ def make_section_animation(variable, colorbar_label, model_depth, model_lat, t, 
 
     ani = animation.FuncAnimation(fig, update_frame, frames=nt, interval=100, blit=False)
     ani.save(filename, writer=animation.FFMpegWriter(fps=10), dpi=200)
-
-
