@@ -1,165 +1,210 @@
-#%%
-import random
+import copy
 import warnings
 
+import matplotlib as mpl
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import matplotlib.colors as mcolors
 from matplotlib.colors import LogNorm
-import cartopy.crs as ccrs
-import geopandas as gpd
-from shapely.geometry import Point
+import xarray as xr
 
-from oae_tmm.grid import make_3d as make_3D
+from oae_tmm.grid import make_3d
 
 
 def get_co2_scenario(scenario, times):
     """Return atmospheric CO2 [ppm] for a given SSP scenario at the requested times.
 
-    Data source: pyTRACE CO2TrajectoriesAdjusted.txt (University of Melbourne
-    greenhouse gas dataset). Scenarios: 'none', 'ssp119', 'ssp126', 'ssp245',
-    'ssp370', 'ssp370_lowNTCF', 'ssp434', 'ssp460', 'ssp534_OS'.
+    Reads from the pyTRACE CO2TrajectoriesAdjusted.txt file (University of Melbourne
+    greenhouse gas dataset) and interpolates linearly to the requested times.
+
+    Parameters
+    ----------
+    scenario : str
+        Emissions scenario. One of: 'none', 'ssp119', 'ssp126', 'ssp245', 'ssp370',
+        'ssp370_lowNTCF', 'ssp434', 'ssp460', 'ssp534_OS', 'REMIND'.
+        'none' holds CO2 fixed at the value of times[0] (historical extrapolation
+        from 2012–2022); a warning is raised if times[0] > 2022.
+    times : np.ndarray
+        1D array of decimal years at which to evaluate CO2 [yr CE].
+
+    Returns
+    -------
+    np.ndarray
+        Atmospheric CO2 [ppm], same length as times.
     """
-    scenarios = {'none': 1, 'ssp119': 2, 'ssp126': 3, 'ssp245': 4, 'ssp370': 5,
-                 'ssp370_lowNTCF': 6, 'ssp434': 7, 'ssp460': 8, 'ssp534_OS': 9,
-                 'REMIND': 10}
+    scenarios = {
+        'none': 1, 'ssp119': 2, 'ssp126': 3, 'ssp245': 4, 'ssp370': 5,
+        'ssp370_lowNTCF': 6, 'ssp434': 7, 'ssp460': 8, 'ssp534_OS': 9,
+        'REMIND': 10,
+    }
 
     if scenario not in scenarios:
-        raise ValueError(f"Invalid value: {scenario!r}. Must be one of: {', '.join(scenarios.keys())}")
+        raise ValueError(
+            f"Invalid scenario {scenario!r}. Must be one of: {', '.join(scenarios.keys())}"
+        )
 
     data_file = './pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted.txt'
     data = np.loadtxt(data_file)
-    CO2_data_years = data[:, 0]
-    CO2_data = data[:, scenarios[scenario]]
+    co2_years = data[:, 0]
+    co2_values = data[:, scenarios[scenario]]
 
     if scenario != 'none':
-        atmospheric_CO2 = np.interp(times, CO2_data_years, CO2_data)
-    else:
-        if times[0] > 2022:
-            warnings.warn("'none' scenario chosen, but time > 2022 selected. "
-                          "Canth is based on a linear extrapolation from 2012-2022 in this case.")
-        atmospheric_CO2 = np.interp(times[0], CO2_data_years, CO2_data) * np.ones_like(times)
+        return np.interp(times, co2_years, co2_values)
 
-    return atmospheric_CO2
+    if times[0] > 2022:
+        warnings.warn(
+            "'none' scenario chosen, but time > 2022 selected. "
+            "CO2 is based on a linear extrapolation from 2012–2022."
+        )
+    return np.interp(times[0], co2_years, co2_values) * np.ones_like(times)
 
 
 def plot_surface2d(lats, lons, variable, vmin, vmax, cmap, title):
+    """Plot a filled-contour surface map of a 2D lat/lon field.
 
-    # mask out zero values
+    Zero-valued cells are masked and rendered in black (intended for land cells).
+
+    Parameters
+    ----------
+    lats, lons : np.ndarray
+        1D arrays of latitudes [°N] and longitudes [°E].
+    variable : np.ndarray
+        2D array of shape (n_lat, n_lon).
+    vmin, vmax : float
+        Colorscale limits.
+    cmap : str or matplotlib.colors.Colormap
+        Colormap name or object.
+    title : str
+        Plot title.
+    """
     variable_masked = np.ma.masked_where(variable == 0, variable)
 
-    # create colormap copy, set masked to black
-    cmap = plt.get_cmap(cmap).copy()
+    if not isinstance(cmap, mcolors.Colormap):
+        cmap = mpl.colormaps[cmap].copy()
+    else:
+        cmap = copy.copy(cmap)
     cmap.set_bad(color='black')
 
-    # main plot
-    fig = plt.figure(figsize=(10,7))
-    ax = fig.gca()
-    levels = np.linspace(vmin-0.1, vmax, 100)
-    cntr = plt.contourf(lons, lats, variable_masked, levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
-    c = plt.colorbar(cntr, ax=ax)
-    c.set_ticks(np.round(np.linspace(vmin, vmax, 10),2))
-
-    plt.xlabel('longitude (ºE)')
-    plt.ylabel('latitude (ºN)')
-    plt.title(title)
-    plt.xlim([0, 360]), plt.ylim([-90,90])
+    fig, ax = plt.subplots(figsize=(10, 7))
+    levels = np.linspace(vmin - 0.1, vmax, 100)
+    cntr = ax.contourf(lons, lats, variable_masked, levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
+    c = fig.colorbar(cntr, ax=ax)
+    c.set_ticks(np.round(np.linspace(vmin, vmax, 10), 2))
+    ax.set_xlabel('longitude (ºE)')
+    ax.set_ylabel('latitude (ºN)')
+    ax.set_title(title)
+    ax.set_xlim((0, 360))
+    ax.set_ylim((-90, 90))
 
 
-def plot_surface3d(lats, lons, variable, depth_level, vmin, vmax, cmap, title, logscale=None, lon_lims=None):
-    fig = plt.figure(figsize=(10,7), dpi=200)
-    ax = fig.gca()
+def plot_surface3d(lats, lons, variable, depth_level, vmin, vmax, cmap, title,
+                   logscale=False, lon_lims=None):
+    """Plot a filled-contour surface map of one depth level from a 3D lat/lon/depth field.
+
+    Parameters
+    ----------
+    lats, lons : np.ndarray
+        1D arrays of latitudes [°N] and longitudes [°E].
+    variable : np.ndarray
+        3D array of shape (n_lat, n_lon, n_depth).
+    depth_level : int
+        Depth index to plot.
+    vmin, vmax : float
+        Colorscale limits.
+    cmap : str
+        Matplotlib colormap name.
+    title : str
+        Plot title.
+    logscale : bool, optional
+        If True, use LogNorm colorscale (vmin/vmax are ignored). Default False.
+    lon_lims : tuple of float, optional
+        (lon_min, lon_max) x-axis limits. If None, defaults to [0, 360].
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    fig, ax = plt.subplots(figsize=(10, 7), dpi=200)
 
     if logscale:
-        cntr = plt.contourf(lons, lats, variable[:, :, depth_level], norm=LogNorm(), cmap=cmap, vmin=vmin, vmax=vmax)
+        cntr = ax.contourf(lons, lats, variable[:, :, depth_level],
+                           norm=LogNorm(), cmap=cmap)
+        fig.colorbar(cntr, ax=ax)
     else:
-        levels = np.linspace(vmin-1e-7, vmax, 100)
-        cntr = plt.contourf(lons, lats, variable[:, :, depth_level], levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
-
-    c = plt.colorbar(cntr, ax=ax)
-    c.set_ticks(np.round(np.linspace(vmin, vmax, 10),2))
-    plt.xlabel('longitude (ºE)')
-    plt.ylabel('latitude (ºN)')
-    plt.title(title)
-
-    if lon_lims is None:
-        plt.xlim([0, 360]), plt.ylim([-90,90])
-    else:
-        plt.ylim([-90,90])
-        plt.xlim(lon_lims)
+        levels = np.linspace(vmin - 1e-7, vmax, 100)
+        cntr = ax.contourf(lons, lats, variable[:, :, depth_level],
+                           levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
+        c = fig.colorbar(cntr, ax=ax)
+        c.set_ticks(np.round(np.linspace(vmin, vmax, 10), 2))
+    ax.set_xlabel('longitude (ºE)')
+    ax.set_ylabel('latitude (ºN)')
+    ax.set_title(title)
+    ax.set_ylim((-90, 90))
+    ax.set_xlim((0, 360) if lon_lims is None else lon_lims)
 
     return fig
 
 
 def plot_longitude3d(lats, depths, variable, longitude, vmin, vmax, cmap, title):
-    fig = plt.figure(figsize=(10,7))
-    ax = fig.gca()
-    levels = np.linspace(vmin-1e-7, vmax, 100)
-    cntr = plt.contourf(lats, depths, variable[:, longitude, :].T, levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
-    c = plt.colorbar(cntr, ax=ax)
-    c.set_ticks(np.round(np.linspace(vmin, vmax, 10),2))
+    """Plot a filled-contour latitude–depth section at a fixed longitude index.
+
+    Parameters
+    ----------
+    lats : np.ndarray
+        1D array of latitudes [°N].
+    depths : np.ndarray
+        1D array of depth levels [m].
+    variable : np.ndarray
+        3D array of shape (n_lat, n_lon, n_depth).
+    longitude : int
+        Longitude index to slice.
+    vmin, vmax : float
+        Colorscale limits.
+    cmap : str
+        Matplotlib colormap name.
+    title : str
+        Plot title.
+    """
+    fig, ax = plt.subplots(figsize=(10, 7))
+    levels = np.linspace(vmin - 1e-7, vmax, 100)
+    cntr = ax.contourf(lats, depths, variable[:, longitude, :].T,
+                       levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
+    c = fig.colorbar(cntr, ax=ax)
+    c.set_ticks(np.round(np.linspace(vmin, vmax, 10), 2))
     ax.invert_yaxis()
-    plt.xlabel('latitude (ºN)')
-    plt.ylabel('depth (m)')
-    plt.title(title)
-    plt.xlim([-90, 90]), plt.ylim([depths.max(), 0])
+    ax.set_xlabel('latitude (ºN)')
+    ax.set_ylabel('depth (m)')
+    ax.set_title(title)
+    ax.set_xlim((-90, 90))
+    ax.set_ylim((depths.max(), 0))
 
 
-def plot_lmes(lme_masks, ocnmask, lats, lons):
-    # convert lons to -180 to 180 for plotting
-    lons_shifted = np.where(lons > 180, lons - 360, lons)
+def broadcast_to_dataset(array, ds):
+    """Wrap a numpy array in an xarray DataArray aligned to a dataset's lat/lon/depth coords.
 
-    # create an array to hold lme ids
-    id_grid = np.full((len(lons), len(lats)), np.nan)
-    centers = []
+    Convenience wrapper for the common pattern of broadcasting a static 3D numpy
+    array (e.g. model volumes, GLODAP climatology) against a time-varying dataset
+    so that xarray can apply arithmetic with automatic dimension alignment.
 
-    for idx, (lme_id, mask) in enumerate(lme_masks.items(), start=1):
-        id_grid[mask] = int(lme_id)
+    Parameters
+    ----------
+    array : np.ndarray
+        3D array of shape (n_lat, n_lon, n_depth).
+    ds : xarray.Dataset
+        Dataset whose lat, lon, and depth coordinates are used.
 
-        if np.any(mask):
-            lat_center = np.mean(lats[np.any(mask, axis=0)])
-            lon_center = np.mean(lons[np.any(mask, axis=1)])
-            if lon_center > 180:
-                lon_center -= 360
-            centers.append((lon_center, lat_center, int(lme_id)))
-
-    fig = plt.figure(figsize=(14, 8), dpi=200)
-    ax = plt.axes(projection=ccrs.PlateCarree(central_longitude=0))
-    ax.set_global()
-
-    ax.pcolormesh(
-        lons_shifted, lats, ocnmask[0, :, :].T,
-        transform=ccrs.PlateCarree(),
-        cmap='Greys_r', shading='nearest'
-    )
-
-    hsv_colors = [(i / len(lme_masks), 0.75, 0.85) for i in range(len(lme_masks)+4)]
-    rgb_colors = [mcolors.hsv_to_rgb(c) for c in hsv_colors]
-    random.Random(48).shuffle(rgb_colors)
-    cmap = mcolors.ListedColormap(rgb_colors)
-    norm = mcolors.BoundaryNorm(
-        boundaries=np.arange(0.5, len(lme_masks) + 4 + 1.5, 1),
-        ncolors=len(lme_masks)+4
-    )
-
-    ax.pcolormesh(
-        lons_shifted, lats, id_grid.T,
-        transform=ccrs.PlateCarree(),
-        cmap=cmap, alpha=0.8, norm=norm, shading='nearest'
-    )
-
-    for lon_c, lat_c, idx in centers:
-        ax.text(lon_c, lat_c, str(idx),
-                transform=ccrs.PlateCarree(),
-                fontsize=8, ha='center', va='center',
-                bbox=dict(facecolor='white', alpha=0.6, edgecolor='none', pad=1))
-
-    plt.title("Large Marine Ecosystems (62 out of 66 can be represented on OCIM grid)")
-    plt.show()
+    Returns
+    -------
+    xarray.DataArray
+        DataArray with dims ['lat', 'lon', 'depth'] and coordinates from ds.
+    """
+    return xr.DataArray(array, dims=['lat', 'lon', 'depth'],
+                        coords={'lat': ds.lat, 'lon': ds.lon, 'depth': ds.depth})
 
 
-def make_surf_animation(variable, colorbar_label, model_lat, model_lon, t, nt, vmin, vmax, cmap, filename):
+def make_surf_animation(variable, colorbar_label, model_lat, model_lon, t, nt,
+                        vmin, vmax, cmap, filename):
     """Animate a surface (depth=0) field over time and save to an mp4 file.
 
     Parameters
@@ -181,88 +226,31 @@ def make_surf_animation(variable, colorbar_label, model_lat, model_lon, t, nt, v
     filename : str
         Output mp4 path.
     """
-    fig, ax = plt.subplots(figsize=(10,7))
+    levels = np.linspace(vmin, vmax, 100)
+    fig, ax = plt.subplots(figsize=(10, 7))
 
-    cntr = ax.contourf(model_lon, model_lat,
-                       variable.isel(time=0).values[:,:,0],
-                       levels=np.linspace(vmin, vmax, 100),
-                       cmap=cmap, vmin=vmin, vmax=vmax)
-    plt.colorbar(cntr, ax=ax, label=colorbar_label)
+    cntr = ax.contourf(model_lon, model_lat, variable.isel(time=0).values[:, :, 0],
+                       levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
+    fig.colorbar(cntr, ax=ax, label=colorbar_label)
     ax.set_xlabel('Longitude (ºE)')
     ax.set_ylabel('Latitude (ºN)')
-    ax.set_title('t = ' + f'{t[0]:.3f}' + ' yr')
+    ax.set_title(f't = {t[0]:.3f} yr')
 
     def update_frame(idx):
         ax.clear()
-        ax.contourf(model_lon, model_lat,
-                    variable.isel(time=idx).values[:,:,0],
-                    levels=np.linspace(vmin, vmax, 100),
-                    cmap=cmap, vmin=vmin, vmax=vmax)
+        ax.contourf(model_lon, model_lat, variable.isel(time=idx).values[:, :, 0],
+                    levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
         ax.set_xlabel('Longitude (ºE)')
         ax.set_ylabel('Latitude (ºN)')
-        ax.set_title('t = ' + f'{t[idx]:.3f}' + ' yr')
+        ax.set_title(f't = {t[idx]:.3f} yr')
         return []
 
     ani = animation.FuncAnimation(fig, update_frame, frames=nt, interval=100, blit=False)
-    writer = animation.writers['ffmpeg'](fps=10)
-    ani.save(filename, writer=writer, dpi=200)
+    ani.save(filename, writer=animation.FFMpegWriter(fps=10), dpi=200)
 
 
-def make_surf_animation_pH(pH, colorbar_label, model_lat, model_lon, t, nt, ocnmask, vmin, vmax, cmap, filename):
-    """Animate a surface pH field (stored as a flat 1D vector per timestep) over time and save to mp4.
-
-    Parameters
-    ----------
-    pH : list of np.ndarray
-        List of length nt; each element is a 1D flattened array of pH values
-        (ocean cells only, matching the flattened ocnmask ordering).
-    colorbar_label : str
-        Label for the colorbar.
-    model_lat, model_lon : np.ndarray
-        1D arrays of OCIM2-48L latitudes [°N] and longitudes [°E].
-    t : np.ndarray
-        1D array of time values (decimal years) for frame titles.
-    nt : int
-        Number of frames to render.
-    ocnmask : np.ndarray
-        Integer mask of shape (n_lat, n_lon, n_depth); used to expand pH back to 3D.
-    vmin, vmax : float
-        Colorscale limits.
-    cmap : str
-        Matplotlib colormap name.
-    filename : str
-        Output mp4 path.
-    """
-    fig, ax = plt.subplots(figsize=(10,7))
-
-    pH_3D = make_3D(pH[0], ocnmask)
-    cntr = ax.contourf(model_lon, model_lat,
-                       pH_3D[:,:,0],
-                       levels=np.linspace(vmin, vmax, 100),
-                       cmap=cmap, vmin=vmin, vmax=vmax)
-    plt.colorbar(cntr, ax=ax, label=colorbar_label)
-    ax.set_xlabel('Longitude (ºE)')
-    ax.set_ylabel('Latitude (ºN)')
-    ax.set_title('t = ' + f'{t[0]:.3f}' + ' yr')
-
-    def update_frame(idx):
-        ax.clear()
-        pH_3D = make_3D(pH[idx], ocnmask)
-        ax.contourf(model_lon, model_lat,
-                    pH_3D[:,:,0],
-                    levels=np.linspace(vmin, vmax, 100),
-                    cmap=cmap, vmin=vmin, vmax=vmax)
-        ax.set_xlabel('Longitude (ºE)')
-        ax.set_ylabel('Latitude (ºN)')
-        ax.set_title('t = ' + f'{t[idx]:.3f}' + ' yr')
-        return []
-
-    ani = animation.FuncAnimation(fig, update_frame, frames=nt, interval=100, blit=False)
-    writer = animation.writers['ffmpeg'](fps=10)
-    ani.save(filename, writer=writer, dpi=200)
-
-
-def make_section_animation(variable, colorbar_label, model_depth, model_lat, t, nt, vmin, vmax, cmap, filename):
+def make_section_animation(variable, colorbar_label, model_depth, model_lat, t, nt,
+                           vmin, vmax, cmap, filename):
     """Animate a latitude–depth section at lon index 90 (≈181°E) over time and save to mp4.
 
     Parameters
@@ -286,88 +274,28 @@ def make_section_animation(variable, colorbar_label, model_depth, model_lat, t, 
     filename : str
         Output mp4 path.
     """
-    fig, ax = plt.subplots(figsize=(10,7))
+    levels = np.linspace(vmin, vmax, 100)
+    fig, ax = plt.subplots(figsize=(10, 7))
 
-    cntr = ax.contourf(model_lat, model_depth,
-                       variable.isel(time=0).values[:,90,:].T,
-                       levels=np.linspace(vmin, vmax, 100),
-                       cmap=cmap, vmin=vmin, vmax=vmax)
-    plt.colorbar(cntr, ax=ax, label=colorbar_label)
+    cntr = ax.contourf(model_lat, model_depth, variable.isel(time=0).values[:, 90, :].T,
+                       levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
+    fig.colorbar(cntr, ax=ax, label=colorbar_label)
     ax.invert_yaxis()
     ax.set_xlabel('Latitude (ºN)')
     ax.set_ylabel('Depth (m)')
-    ax.set_title('t = ' + f'{t[0]:.3f}' + 'yr at 181ºE')
+    ax.set_title(f't = {t[0]:.3f} yr at 181ºE')
 
     def update_frame(idx):
         ax.clear()
-        ax.contourf(model_lat, model_depth,
-                    variable.isel(time=idx).values[:,90,:].T,
-                    levels=np.linspace(vmin, vmax, 100),
-                    cmap=cmap, vmin=vmin, vmax=vmax)
+        ax.contourf(model_lat, model_depth, variable.isel(time=idx).values[:, 90, :].T,
+                    levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
         ax.invert_yaxis()
         ax.set_xlabel('Latitude (ºN)')
         ax.set_ylabel('Depth (m)')
-        ax.set_title('t = ' + f'{t[idx]:.3f}' + ' yr at 181 ºE')
+        ax.set_title(f't = {t[idx]:.3f} yr at 181ºE')
         return []
 
     ani = animation.FuncAnimation(fig, update_frame, frames=nt, interval=100, blit=False)
-    writer = animation.writers['ffmpeg'](fps=10)
-    ani.save(filename, writer=writer, dpi=200)
+    ani.save(filename, writer=animation.FFMpegWriter(fps=10), dpi=200)
 
 
-def make_section_animation_pH(pH, colorbar_label, model_depth, model_lat, t, nt, ocnmask, vmin, vmax, cmap, filename):
-    """Animate a latitude–depth pH section at lon index 90 (≈181°E) over time and save to mp4.
-
-    Parameters
-    ----------
-    pH : list of np.ndarray
-        List of length nt; each element is a 1D flattened array of pH values
-        (ocean cells only, matching the flattened ocnmask ordering).
-    colorbar_label : str
-        Label for the colorbar.
-    model_depth : np.ndarray
-        1D array of OCIM2-48L depth levels [m].
-    model_lat : np.ndarray
-        1D array of OCIM2-48L latitudes [°N].
-    t : np.ndarray
-        1D array of time values (decimal years) for frame titles.
-    nt : int
-        Number of frames to render.
-    ocnmask : np.ndarray
-        Integer mask of shape (n_lat, n_lon, n_depth); used to expand pH back to 3D.
-    vmin, vmax : float
-        Colorscale limits.
-    cmap : str
-        Matplotlib colormap name.
-    filename : str
-        Output mp4 path.
-    """
-    fig, ax = plt.subplots(figsize=(10,7))
-
-    pH_3D = make_3D(pH[0], ocnmask)
-    cntr = ax.contourf(model_lat, model_depth,
-                       pH_3D[:,90,:].T,
-                       levels=np.linspace(vmin, vmax, 100),
-                       cmap=cmap, vmin=vmin, vmax=vmax)
-    plt.colorbar(cntr, ax=ax, label=colorbar_label)
-    ax.invert_yaxis()
-    ax.set_xlabel('Latitude (ºN)')
-    ax.set_ylabel('Depth (m)')
-    ax.set_title('t = ' + f'{t[0]:.3f}' + ' yr at 181ºE')
-
-    def update_frame(idx):
-        pH_3D = make_3D(pH[idx], ocnmask)
-        ax.clear()
-        ax.contourf(model_lat, model_depth,
-                    pH_3D[:,90,:].T,
-                    levels=np.linspace(vmin, vmax, 100),
-                    cmap=cmap, vmin=vmin, vmax=vmax)
-        ax.invert_yaxis()
-        ax.set_xlabel('Latitude (ºN)')
-        ax.set_ylabel('Depth (m)')
-        ax.set_title('t = ' + f'{t[idx]:.3f}' + ' yr at 181 ºE')
-        return []
-
-    ani = animation.FuncAnimation(fig, update_frame, frames=nt, interval=100, blit=False)
-    writer = animation.writers['ffmpeg'](fps=10)
-    ani.save(filename, writer=writer, dpi=200)
