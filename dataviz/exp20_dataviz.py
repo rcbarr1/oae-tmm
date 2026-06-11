@@ -1,0 +1,938 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Oct 10 10:43:49 2025
+
+DATA VIZ FOR EXP20: Attempting maximum alkalinity calculation with more
+efficient memory usage
+
+@author: Reese C. Barrett
+"""
+#%%
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from oae_tmm.loaders import load_mat
+from oae_tmm.grid import flatten, make_3d, get_depth_idx
+from oae_tmm.trace import calculate_canth, interp_trace
+from dataviz.dataviz import get_co2_scenario, plot_surface2d, plot_surface3d, make_surf_animation, make_surf_animation_pH
+import xarray as xr
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+import PyCO2SYS as pyco2
+from tqdm import tqdm
+
+# load model architecture
+data_path = './data/'
+# output_path = './outputs/'
+output_path = '/Volumes/LaCie/outputs/'
+
+# load transport matrix (OCIM2-48L, from Holzer et al., 2021)
+# transport matrix is referred to as "A" vector in John et al., 2020 (AWESOME OCIM)
+TR = load_mat(data_path + 'OCIM2_48L_base/OCIM2_48L_base_transport.mat')
+TR = TR['TR']
+
+# open up rest of data associated with transport matrix
+model_data = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')
+ocnmask = model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_numpy()
+
+model_lat = model_data['tlat'].isel(depth=0, longitude=0).to_numpy()    # ºN
+model_lon = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()     # ºE
+model_depth = model_data['tz'].isel(longitude=0, latitude=0).to_numpy() # m below sea surface
+model_vols = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy() # m^3
+
+# some other important numbers
+grid_cell_depth = model_data['wz'].transpose('latitude', 'longitude', 'depth').to_numpy() # depth of model layers (need bottom of grid cell, not middle) [m]
+z1 = grid_cell_depth[0, 0, 1] # depth of first model layer [m]
+rho = 1025 # seawater density for volume to mass [kg m-3]
+surf_idx = get_depth_idx(ocnmask,0) # indicies of surface grid cells in 3D array flattened by flatten()
+
+model_data.close()
+
+# rules for saving files
+t_per_file = 2000 # number of time steps 
+
+# calculate when new layers start (for line plots)
+new_layer_idx = np.zeros(len(model_depth))
+for i in range(len(model_depth)):
+    new_layer_idx[i] = int(np.nansum(ocnmask[i,:,:]))
+new_layer_idx = np.cumsum(new_layer_idx)
+
+#%% set experiments we are interested in plotting
+experiment_names = ['exp20_2025-10-09-ssp_none-MLD-all_lat_lon-dt_1yr',
+                    'exp20_2025-10-09-ssp_none-MLD-all_lat_lon-dt_1month',]
+
+experiment_names = ['exp20_2025-10-15-ssp_none-MLD-all_lat_lon-dt_1year_co2sys1perc',
+                    'exp20_2025-10-15-ssp_none-MLD-all_lat_lon-dt_1month_co2sys1perc',]
+
+experiment_names = ['exp21_TEST']
+
+labels = ['dt = 1 yr', 'dt = 1 month']
+
+experiment_names = ['exp21_2025-10-29_20-08-08_t0_none_0.0',
+                    'exp21_2025-10-29_22-58-59_t1_none_0.0',
+                    'exp21_2025-10-30_03-40-45_t2_none_0.0',
+                    'exp21_2025-10-30_10-26-40_t3_none_0.0',
+                    'exp21_2025-10-30_16-11-42_t4_none_0.0',]
+
+
+experiment_names = ['exp21_2025-11-06_t0_none',
+                    'exp21_2025-11-06_t1_none',
+                    'exp21_2025-11-06_t2_none',
+                    'exp21_2025-11-06_t3_none',
+                    'exp21_2025-11-06_t4_none',]
+'''
+experiment_names = ['exp21_2025-10-29_19-55-01_t0_none_0.01',
+                    'exp21_2025-10-29_22-11-53_t1_none_0.01',
+                    'exp21_2025-10-30_02-53-39_t2_none_0.01',
+                    'exp21_2025-10-30_05-48-49_t3_none_0.01',
+                    'exp21_2025-10-30_16-09-02_t4_none_0.01',]
+
+experiment_names = ['exp21_2025-10-29_17-57-38_t0_none_0.05',
+                    'exp21_2025-10-29_22-03-02_t1_none_0.05',
+                    'exp21_2025-10-30_01-49-28_t2_none_0.05',
+                    'exp21_2025-10-30_04-36-42_t3_none_0.05',
+                    'exp21_2025-10-30_15-49-33_t4_none_0.05',]
+'''
+labels = ['dt = 1 yr', 'dt = 1 month', 'dt = 1 day', 'dt = 1 hour', 'dt = mixed']
+'''
+experiment_names = ['exp21_2025-11-05_t2_none',
+                    'exp21NN_2025-11-05_t2_none']
+labels=['dt = 1 day (pyco2sys)', 'dt = 1 day (NN)']
+'''
+'''
+experiment_names = ['exp22_2025-12-01_t0_none',
+                    'exp22_2025-12-01_t0_ssp126',
+                    'exp22_2025-12-01_t0_ssp245',
+                    'exp22_2025-12-01_t0_ssp534_OS',
+                    'exp22_2025-12-01_t1_none',
+                    'exp22_2025-12-01_t1_ssp126',
+                    'exp22_2025-12-01_t1_ssp245',
+                    'exp22_2025-12-01_t1_ssp534_OS']
+
+labels = ['dt=1yr, no ssp', 
+          'dt=1yr, ssp126', 
+          'dt=1yr, ssp245', 
+          'dt=1yr, ssp534_OS', 
+          'dt=1mon, no ssp', 
+          'dt=1mon, ssp126', 
+          'dt=1mon, ssp245', 
+          'dt=1mon, ssp534_OS']
+
+scenarios = ['none',
+             'ssp126',
+             'ssp245',
+             'ssp534_OS',
+             'none',
+             'ssp126',
+             'ssp245',
+             'ssp534_OS',]
+
+linestyles = ['-','-','-','-','--','--','--','--',]
+linecolors = ['#023880', '#96adcf', '#145a6a', '#2eceb7','#023880', '#96adcf', '#145a6a', '#2eceb7']
+ncol = 2
+start_year = 2015
+'''
+
+experiment_names = ['exp22_2026-02-06_t0_none',
+                    'exp22_2026-02-06_t0_ssp126',
+                    'exp22_2026-02-06_t0_ssp245',
+                    'exp22_2026-02-06_t0_ssp534_OS',
+                    'exp22_2026-02-06_t1_none',
+                    'exp22_2026-02-06_t1_ssp126',
+                    'exp22_2026-02-06_t1_ssp245',
+                    'exp22_2026-02-06_t1_ssp534_OS',]
+                    # 'exp22_2026-02-06_t2_none',
+                    # 'exp22_2026-02-06_t2_ssp126',
+                    # 'exp22_2026-02-06_t2_ssp245',
+                    # 'exp22_2026-02-06_t2_ssp534_OS',]
+
+experiment_names = ['exp23_2026-02-06_t0_none',
+                    'exp23_2026-02-06_t0_ssp126',
+                    'exp23_2026-02-06_t0_ssp245',
+                    'exp23_2026-02-06_t0_ssp534_OS',
+                    'exp23_2026-02-06_t1_none',
+                    'exp23_2026-02-06_t1_ssp126',
+                    'exp23_2026-02-06_t1_ssp245',
+                    'exp23_2026-02-06_t1_ssp534_OS',]
+                    # 'exp23_2026-02-06_t2_none',
+                    # 'exp23_2026-02-06_t2_ssp126',
+                    # 'exp23_2026-02-06_t2_ssp245',
+                    # 'exp23_2026-02-06_t2_ssp534_OS',]
+
+scenarios = ['none',
+             'ssp126',
+             'ssp245',
+             'ssp534_OS',
+             'none',
+             'ssp126',
+             'ssp245',
+             'ssp534_OS',
+             'none',
+             'ssp126',
+             'ssp245',
+             'ssp534_OS',]
+
+labels = ['dt=1yr, no_ssp',
+          'dt=1yr, ssp126',
+          'dt=1yr, ssp245',
+          'dt=1yr, ssp534_OS',
+          'dt=1mon, no_ssp',
+          'dt=1mon, ssp126',
+          'dt=1mon, ssp245',
+          'dt=1mon, ssp534_OS',
+          'dt=1day, no_ssp',
+          'dt=1day, ssp126',
+          'dt=1day, ssp245',
+          'dt=1day, ssp534_OS']
+          
+linestyles = ['-','-','-','-','--','--','--','--',':',':',':',':'] 
+linecolors = ['#023880', '#96adcf', '#145a6a', '#2eceb7',
+              '#023880', '#96adcf', '#145a6a', '#2eceb7', 
+              '#023880', '#96adcf', '#145a6a', '#2eceb7',]
+ncol = 2
+start_year = 2015
+textcolor = '#595959'
+
+#%% figures to compare old and new TRACE interpolation with calculated TRACE
+
+experiment_names = ['exp23_2026-03-27_NEWTRACE_ssp534_OS',
+                    'exp23_2026-03-27_OLDTRACE_ssp534_OS',
+                    'exp22_2026-03-27_CALC_ssp534_OS',]
+
+scenarios = ['ssp534_OS',
+             'ssp534_OS',
+             'ssp534_OS']
+
+linestyles = ['-','-','-','-']
+linecolors = ['#00429d', '#bf89b6', '#ffb0de']
+labels = ['High res gridded', 'Low res gridded', 'Calculated Canth']
+ncol = 1
+start_year = 2020
+mpl.rcParams['font.family'] = 'Calibri'
+textcolor = '#595959'
+mpl.rcParams['text.color'] = textcolor
+mpl.rcParams['axes.labelcolor'] = textcolor
+mpl.rcParams['xtick.color'] = textcolor
+mpl.rcParams['ytick.color'] = textcolor
+mpl.rcParams['font.weight'] = 'bold'
+
+#%% figures for OSM talk
+experiment_names = ['exp22_2026-02-11_t1_none_ML',
+                    'exp22_2026-02-11_t1_ssp126_ML',
+                    'exp22_2026-02-11_t1_ssp245_ML',
+                    'exp22_2026-02-11_t1_ssp534_OS_ML',]
+
+scenarios = ['none',
+             'ssp126',
+             'ssp245',
+             'ssp534_OS']
+
+linestyles = ['-','-','-','-']
+linecolors = ['#00429d', '#7a64a8', '#bf89b6', '#ffb0de']
+labels = ['No emissions', 'SSP1-2.6', 'SSP2-4.5', 'SSP5-3.4OS']
+ncol = 1
+start_year = 2030
+mpl.rcParams['font.family'] = 'Calibri'
+textcolor = '#595959'
+mpl.rcParams['text.color'] = textcolor
+mpl.rcParams['axes.labelcolor'] = textcolor
+mpl.rcParams['xtick.color'] = textcolor
+mpl.rcParams['ytick.color'] = textcolor
+mpl.rcParams['font.weight'] = 'bold'
+
+#%% pull in preindustrial baselines
+
+# get GLODAP data
+DIC_3D = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/DIC.npy') # dissolved inorganic carbon [µmol kg-1]
+AT_3D = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/TA.npy')   # total alkalinity [µmol kg-1]
+T_3D = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/temperature.npy') # temperature [ºC]
+S_3D = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/salinity.npy') # salinity [unitless]
+Si_3D = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/silicate.npy') # silicate [µmol kg-1]
+P_3D = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/PO4.npy') # phosphate [µmol kg-1]
+
+S = flatten(S_3D, ocnmask)
+T = flatten(T_3D, ocnmask)
+Si = flatten(Si_3D, ocnmask)
+P = flatten(P_3D, ocnmask)
+
+# get TRACE data (switch to interpolation for speed?)
+Canth_2002_3D = calculate_canth('none', 2002, T_3D, S_3D, ocnmask, model_lat, model_lon, model_depth)
+if start_year != 2002:
+    Canth_3D = calculate_canth('none', start_year, T_3D, S_3D, ocnmask, model_lat, model_lon, model_depth)
+else:
+    Canth_3D = Canth_2002_3D
+
+# calculate preindustrial DIC by subtracting anthropogenic carbon
+DIC_preind_3D = DIC_3D - Canth_2002_3D
+DIC_preind = flatten(DIC_preind_3D, ocnmask)
+
+DIC_start_3D = DIC_preind_3D + Canth_3D
+
+# create "pressure" array by broadcasting depth array
+pressure_3D = np.tile(model_depth[:, np.newaxis, np.newaxis], (1, ocnmask.shape[0], ocnmask.shape[1])).transpose([1, 2, 0])
+pressure = flatten(pressure_3D, ocnmask) 
+
+# calculate preindustrial pH assuming steady state alkalinity
+co2sys = pyco2.sys(dic=DIC_preind,
+                   alkalinity=flatten(AT_3D, ocnmask),
+                   salinity=flatten(S_3D,ocnmask),
+                   temperature=flatten(T_3D,ocnmask),
+                   pressure=flatten(pressure_3D,ocnmask),
+                   total_silicate=flatten(Si_3D,ocnmask),
+                   total_phosphate=flatten(P_3D,ocnmask))
+
+pH_preind = co2sys['pH']
+pH_preind_3D = make_3d(pH_preind, ocnmask)
+
+#%% calculate anthropogenic carbon at each time step
+Canth_all_scenarios = []
+interp = 0
+
+# open dataset with relevant time fields
+ds = xr.open_mfdataset(
+        output_path + experiment_names[0] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True)
+
+t = ds.time.values
+
+# with interpolation
+if interp:
+    for scenario in scenarios:
+        Canth_all_idx = []
+        for idx in tqdm(range(len(t))):
+            if scenario != 'none':
+                Canth_idx_3D = interp_trace(data_path, t[idx], scenario, model_lat, model_lon, model_depth, ocnmask)
+            else:
+                Canth_idx_3D = Canth_3D
+            Canth_all_idx.append(flatten(Canth_idx_3D, ocnmask))
+        Canth_all_scenarios.append(Canth_all_idx)
+
+# without interpolation
+else:
+    for scenario in scenarios:
+        Canth_all_idx = []
+        for idx in tqdm(range(len(t))):
+            if scenario != 'none':
+                Canth_idx_3D = calculate_canth(scenario, t[idx], T_3D, S_3D, ocnmask, model_lat, model_lon, model_depth)
+            else:
+                Canth_idx_3D = Canth_3D
+            Canth_all_idx.append(flatten(Canth_idx_3D, ocnmask))
+        Canth_all_scenarios.append(Canth_all_idx)
+
+np.save(output_path + 'Canth_all_scenarios_calculated_2030-2080.npy', Canth_all_scenarios)
+
+#%% cumulative AT added
+fig = plt.figure(figsize=(3.5,3.5), dpi=200)
+ax = fig.gca()
+
+# use xarray to open metadata of files of interest
+for exp_idx in range(len(experiment_names)):
+    ds = xr.open_mfdataset(
+        output_path + experiment_names[exp_idx] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True)
+    
+    # broadcast model_vols to convert ∆AT from per kg to total
+    model_vols_xr = xr.DataArray(model_vols, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+    
+    AT_added = ds['AT_added'] * model_vols_xr * rho * 1e-6
+    AT_added = AT_added.sum(dim=['lat', 'lon', 'depth'], skipna=True)
+    AT_added_cum = AT_added.cumsum(dim='time')
+    
+    # only actually pull values into memory needed for plotting
+    ax.plot(ds['time'].values, AT_added_cum.compute().values, label=labels[exp_idx], c=linecolors[exp_idx], ls=linestyles[exp_idx])
+    
+# plt.legend(loc='lower center', ncol=ncol, bbox_to_anchor=(0.5, -0.39))
+plt.xlabel('Year', fontsize=11.5, weight='bold')
+plt.ylabel('Cumulative $A_{\mathbf{T}}$ added to mixed layer (mol)', fontsize=11.5, weight='bold')
+ax.spines['bottom'].set_color(textcolor)
+ax.spines['top'].set_color(textcolor)
+ax.spines['left'].set_color(textcolor)
+ax.spines['right'].set_color(textcolor)
+#plt.ylim([0, 6.5e16])
+#%% normal AT added
+fig = plt.figure(figsize=(3.5,3.5), dpi=200)
+ax = fig.gca()
+
+# use xarray to open metadata of files of interest
+for exp_idx in range(len(experiment_names)):
+    ds = xr.open_mfdataset(
+        output_path + experiment_names[exp_idx] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True)
+    
+    # broadcast model_vols to convert ∆AT from per kg to total
+    model_vols_xr = xr.DataArray(model_vols, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+    
+    AT_added = ds['AT_added'] * model_vols_xr * rho * 1e-6
+    AT_added = AT_added.sum(dim=['lat', 'lon', 'depth'], skipna=True)
+    
+    ax.plot(ds['time'].values, AT_added.compute().values, label=labels[exp_idx], c=linecolors[exp_idx], ls=linestyles[exp_idx])
+    
+plt.legend(loc='upper right', ncol=ncol, fontsize=11.5)
+plt.xlabel('Year', fontsize=11.5, weight='bold')
+plt.ylabel('Instantaneous $A_{\mathbf{T}}$ added to mixed layer (mol)', fontsize=11.5, weight='bold') 
+ax.spines['bottom'].set_color(textcolor)
+ax.spines['top'].set_color(textcolor)
+ax.spines['left'].set_color(textcolor)
+ax.spines['right'].set_color(textcolor)
+
+#%% surface AT added
+# use xarray to open metadata of files of interest
+# for exp_idx in range(len(experiment_names)):
+for exp_idx in range(1):
+    ds = xr.open_mfdataset(
+        output_path + experiment_names[exp_idx] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True)
+    
+    for idx in np.arange(0, len(ds.time), 12):
+        DIC = flatten(ds['delDIC'].isel(time=idx).values, ocnmask) + flatten(DIC_start_3D, ocnmask) 
+        AT = flatten(ds['delAT'].isel(time=idx).values, ocnmask) + flatten(AT_3D, ocnmask)  
+        co2sys = pyco2.sys(
+                alkalinity=AT,
+                dic=DIC,
+                salinity=S,
+                temperature=T,
+                pressure=pressure,
+                total_silicate=Si,
+                total_phosphate=P) 
+        
+        co2sys_start = pyco2.sys(
+                alkalinity=AT,
+                dic=flatten(DIC_start_3D, ocnmask), 
+                salinity=S,
+                temperature=T,
+                pressure=pressure,
+                total_silicate=Si,
+                total_phosphate=P) 
+        
+        delpH = make_3d(co2sys['pH'] - co2sys_start['pH'], ocnmask)
+        
+        plot_surface3d(model_lat, model_lon, delpH, 0, -0.2, 0.2, 'RdBu', 'delpH in ' + str(ds['time'].isel(time=idx).values))
+
+#%% change in atmospheric CO2
+fig = plt.figure(figsize=(3.5,3.5), dpi=200)
+ax = fig.gca()
+
+# use xarray to open metadata of files of interest
+#for exp_idx in range(len(experiment_names)):
+for exp_idx in range(len(experiment_names)):
+    ds = xr.open_mfdataset(
+        output_path + experiment_names[exp_idx] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True)
+    
+    # only actually pull values into memory needed for plotting
+    ax.plot(ds['time'].values, ds['delxCO2'].values, label=labels[exp_idx], c=linecolors[exp_idx], ls=linestyles[exp_idx])
+    
+# plt.legend(loc='upper right', ncol=ncol)
+plt.xlabel('Year', fontsize=11.5, weight='bold')
+plt.ylabel('Change in atmospheric CO$_{2}$ (ppm)', fontsize=11.5, weight='bold')
+ax.spines['bottom'].set_color(textcolor)
+ax.spines['top'].set_color(textcolor)
+ax.spines['left'].set_color(textcolor)
+ax.spines['right'].set_color(textcolor)
+#plt.ylim([-90, 0])
+
+#%% total atmospheric CO2 over time
+fig = plt.figure(figsize=(3.5,3.5), dpi=200)
+ax = fig.gca()
+
+# use xarray to open metadata of files of interest
+for exp_idx in range(len(experiment_names)):
+    ds = xr.open_mfdataset(
+        output_path + experiment_names[exp_idx] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True)
+
+    # get background atmospheric CO2 based on relevant CO2 scenario
+    atmospheric_CO2 = get_co2_scenario(scenarios[exp_idx], ds['time'].values)
+
+    # only actually pull values into memory needed for plotting
+    ax.plot(ds['time'].values, ds['delxCO2'].values + atmospheric_CO2, label=labels[exp_idx], c=linecolors[exp_idx], ls=linestyles[exp_idx])
+    ax.plot(ds['time'].values, atmospheric_CO2, label=labels[exp_idx], c=linecolors[exp_idx], ls=':')
+    
+#plt.legend(loc='lower center', ncol=ncol, bbox_to_anchor=(0.5, -0.39))
+plt.xlabel('Year', fontsize=11.5, weight='bold')
+plt.ylabel('Atmospheric CO$_{2}$ (ppm)', fontsize=11.5, weight='bold')
+#plt.title('atmospheric CO2 with maximum OAE')
+#plt.ylim([310, 560])
+ax.spines['bottom'].set_color(textcolor)
+ax.spines['top'].set_color(textcolor)
+ax.spines['left'].set_color(textcolor)
+ax.spines['right'].set_color(textcolor)
+
+#%% change in DIC (surface)
+fig = plt.figure(figsize=(3.5,3.5), dpi=200)
+ax = fig.gca()
+
+# plot preindustrial baseline
+ax.axhline(np.average(DIC_preind[surf_idx], weights=flatten(model_vols,ocnmask)[surf_idx]), c='black', linestyle='--', label='Preindustrial DIC')
+
+# store DIC and model_vols in xarray for broadcasting
+DIC_start_ds = xr.DataArray(DIC_start_3D, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+model_vols_ds = xr.DataArray(model_vols, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+
+# use xarray to open metadata of files of interest
+for exp_idx in tqdm(range(len(experiment_names))):
+    ds = xr.open_mfdataset(
+        output_path + experiment_names[exp_idx] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True)
+    
+    # wrap GLODAP DIC in xarray dataset to convert ∆DIC to total DIC over time
+    DIC_modeled_3D = ds['delDIC'] + DIC_start_ds
+    
+    # wrap model_vols in xarray dataset to convert from concentration to amount or use in weighted average
+    DIC_weighted_mean = DIC_modeled_3D.isel(depth=0).weighted(model_vols_xr.isel(depth=0)).mean(dim=['lat', 'lon'], skipna=True)
+
+    ax.plot(ds['time'].values, DIC_weighted_mean.values, label=labels[exp_idx], c=linecolors[exp_idx], ls=linestyles[exp_idx])
+
+#plt.legend(loc='lower right', ncol=ncol)
+plt.xlabel('Year', fontsize=11.5, weight='bold')
+plt.ylabel('Average surface ocean DIC (µmol kg$^{-1}$)', fontsize=11.5, weight='bold')
+ax.spines['bottom'].set_color(textcolor)
+ax.spines['top'].set_color(textcolor)
+ax.spines['left'].set_color(textcolor)
+ax.spines['right'].set_color(textcolor)
+
+#%% change in DIC (full ocean)
+fig = plt.figure(figsize=(3.5,3.5), dpi=200)
+ax = fig.gca()
+DIC_start_ds = xr.DataArray(DIC_start_3D, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+
+# plot preindustrial baseline
+ax.axhline(np.average(DIC_preind, weights=flatten(model_vols,ocnmask)), c='black', linestyle='--', label='Preindustrial DIC')
+
+# use xarray to open metadata of files of interest
+for exp_idx in tqdm(range(len(experiment_names))):
+    ds = xr.open_mfdataset(
+        output_path + experiment_names[exp_idx] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True)
+    
+    # wrap GLODAP DIC in xarray dataset to convert ∆DIC to total DIC over time
+    DIC_modeled_3D = ds['delDIC'] + DIC_start_ds
+    
+    # wrap model_vols in xarray dataset to convert from concentration to amount or use in weighted average
+    model_vols_ds = xr.DataArray(model_vols, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+    DIC_weighted_mean = DIC_modeled_3D.weighted(model_vols_xr).mean(dim=['lat','lon', 'depth'])
+
+    ax.plot(ds['time'].values, DIC_weighted_mean.values, label=labels[exp_idx], c=linecolors[exp_idx], ls=linestyles[exp_idx])
+
+ax.legend(bbox_to_anchor=(1, 0.05), loc='lower right', ncol=ncol)
+plt.xlabel('Year', fontsize=11.5, weight='bold')
+plt.ylabel('Average ocean DIC (µmol kg$^{-1}$)', fontsize=11.5, weight='bold')
+ax.spines['bottom'].set_color(textcolor)
+ax.spines['top'].set_color(textcolor)
+ax.spines['left'].set_color(textcolor)
+ax.spines['right'].set_color(textcolor)
+
+#%% change in pH (surface)
+Canth_all_scenarios = np.load(output_path + 'Canth_all_scenarios_calculated_2030-2080.npy')
+
+fig = plt.figure(figsize=(3.5,3.5), dpi=200)
+ax = fig.gca()
+DIC_preind_ds = xr.DataArray(DIC_preind_3D, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+AT_ds = xr.DataArray(AT_3D, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+
+# plot preindustrial baseline
+ax.axhline(np.average(pH_preind[surf_idx], weights=flatten(model_vols,ocnmask)[surf_idx]), c='black', linestyle='--', label='Preindustrial pH')
+
+# use xarray to open metadata of files of interest
+for exp_idx in range(len(experiment_names)):
+    ds = xr.open_mfdataset(
+        output_path + experiment_names[exp_idx] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True)
+    
+    # same for ∆AT to AT
+    AT_modeled_3D = ds['delAT'] + AT_ds
+
+    avg_pH_modeled_surf = np.zeros(len(ds['time']))
+
+    for idx in tqdm(range(len(ds['time']))):
+        # wrap Canth in xarray dataset to convert ∆DIC to total DIC over time
+        Canth_ds = xr.DataArray(make_3d(Canth_all_scenarios[exp_idx][idx], ocnmask), dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+        DIC_modeled_3D = ds['delDIC'] + DIC_preind_ds + Canth_ds
+        
+        AT_modeled = flatten(AT_modeled_3D.isel(time=idx).values,ocnmask)[surf_idx]
+        DIC_modeled = flatten(DIC_modeled_3D.isel(time=idx).values,ocnmask)[surf_idx]
+
+        #  call co2sys to calculate pH
+        co2sys = pyco2.sys(
+            alkalinity=AT_modeled,
+            dic=DIC_modeled,
+            salinity=S[surf_idx],
+            temperature=T[surf_idx],
+            pressure=pressure[surf_idx],
+            total_silicate=Si[surf_idx],
+            total_phosphate=P[surf_idx])
+    
+        avg_pH_modeled_surf[idx] = np.average(co2sys['pH'], weights=flatten(model_vols,ocnmask)[surf_idx])
+        
+    ax.plot(ds['time'].values, avg_pH_modeled_surf, label=labels[exp_idx], c=linecolors[exp_idx], ls=linestyles[exp_idx])
+
+plt.xlabel('Year', fontsize=11.5, weight='bold')
+plt.ylabel('Average surface ocean pH (µmol kg$^{-1}$)', fontsize=11.5, weight='bold')
+ax.spines['bottom'].set_color(textcolor)
+ax.spines['top'].set_color(textcolor)
+ax.spines['left'].set_color(textcolor)
+ax.spines['right'].set_color(textcolor)
+
+#%% change in pH (full ocean)
+fig = plt.figure(figsize=(3.5,3.5), dpi=200)
+ax = fig.gca()
+DIC_preind_ds = xr.DataArray(DIC_preind_3D, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+AT_ds = xr.DataArray(AT_3D, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+
+# plot preindustrial baseline
+ax.axhline(np.average(pH_preind, weights=flatten(model_vols,ocnmask)), c='black', linestyle='--', label='Preindustrial pH')
+
+# use xarray to open metadata of files of interest
+for exp_idx in range(len(experiment_names)):
+    ds = xr.open_mfdataset(
+        output_path + experiment_names[exp_idx] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True)
+    
+    # same for ∆AT to AT
+    AT_modeled_3D = ds['delAT'] + AT_ds
+    
+    avg_pH_modeled = np.zeros(len(ds['time']))
+    
+    for idx in tqdm(range(len(ds['time']))):
+        # wrap Canth in xarray dataset to convert ∆DIC to total DIC over time
+        Canth_ds = xr.DataArray(make_3d(Canth_all_scenarios[exp_idx][idx], ocnmask), dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+        DIC_modeled_3D = ds['delDIC'] + DIC_preind_ds + Canth_ds
+        
+        AT_modeled = flatten(AT_modeled_3D.isel(time=idx).values, ocnmask)
+        DIC_modeled = flatten(DIC_modeled_3D.isel(time=idx).values, ocnmask)
+
+        #  call co2sys to calculate pH
+        co2sys = pyco2.sys(
+            alkalinity=AT_modeled,
+            dic=DIC_modeled,
+            salinity=S,
+            temperature=T,
+            pressure=pressure,
+            total_silicate=Si,
+            total_phosphate=P)
+        
+        avg_pH_modeled[idx] = np.average(co2sys['pH'], weights=flatten(model_vols,ocnmask))
+    
+    ax.plot(ds['time'].values, avg_pH_modeled, label=labels[exp_idx], c=linecolors[exp_idx], ls=linestyles[exp_idx])
+
+plt.legend(loc='lower right', ncol=ncol)
+plt.xlabel('Year', fontsize=11.5, weight='bold')
+plt.ylabel('Average ocean pH (µmol kg$^{-1}$)', fontsize=11.5, weight='bold')
+ax.spines['bottom'].set_color(textcolor)
+ax.spines['top'].set_color(textcolor)
+ax.spines['left'].set_color(textcolor)
+ax.spines['right'].set_color(textcolor)
+
+#%% change in revelle factors
+# plot RF in 2030 and 2080 for all four scenarios at surface and in ocean basins: Atlantic (25.5°W), Pacific (150.5ºW), and Indian (90.5°E)
+# plot difference in RF between 2080 and 2030 for all four scenarios and in ocean basins
+
+Canth_all_scenarios = np.load(output_path + 'Canth_all_scenarios_calculated_2030-2080.npy')
+
+# get preindustrial baselines for DIC & AT
+DIC_preind_ds = xr.DataArray(DIC_preind_3D, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+AT_ds = xr.DataArray(AT_3D, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+
+# make array to store output values in
+# num experiments x num time steps of interest x length of flattened ocnmask
+t_idxs = [0, -1]
+revelle_factors = np.zeros((len(experiment_names), len(t_idxs), len(S)))
+
+# use xarray to open metadata of files of interest
+for exp_idx in range(len(experiment_names)):
+    ds = xr.open_mfdataset(
+        output_path + experiment_names[exp_idx] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True)
+    
+    # convert ∆AT to AT
+    AT_modeled_3D = ds['delAT'] + AT_ds
+
+    for t_idx in t_idxs:
+        # wrap Canth in xarray dataset to convert ∆DIC to total DIC over time
+        Canth_ds = xr.DataArray(make_3d(Canth_all_scenarios[exp_idx, t_idx, :], ocnmask), dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+        DIC_modeled_3D = ds['delDIC'].isel(time=t_idx) + DIC_preind_ds + Canth_ds
+        
+        AT_modeled = flatten(AT_modeled_3D.isel(time=t_idx).values, ocnmask)
+        DIC_modeled = flatten(DIC_modeled_3D.values, ocnmask)
+
+        #  call co2sys to calculate Revelle factor
+        co2sys = pyco2.sys(
+            alkalinity=AT_modeled,
+            dic=DIC_modeled,
+            salinity=S,
+            temperature=T,
+            pressure=pressure,
+            total_silicate=Si,
+            total_phosphate=P)
+
+        revelle_factors[exp_idx, t_idx, :] = co2sys['revelle_factor']
+
+#%% make surface plots: three columns (2030, 2080, difference) and four rows (one for each)
+fig, axes = plt.subplots(4, 3, figsize=(10, 12), dpi=200)
+# fig.suptitle('Revelle Factors', fontsize=16, weight='bold')
+
+rf_norm = plt.Normalize(vmin=8, vmax=20)
+rf_diff_norm = plt.Normalize(vmin=-5, vmax=5)
+
+# plot 2030
+for exp_idx in range(len(experiment_names)):
+    ax = axes[exp_idx, 0]
+    RF_to_plot = make_3d(revelle_factors[exp_idx, 0, :], ocnmask)[:, :, 0]
+    ax.contourf(model_lon, model_lat, RF_to_plot, cmap='viridis', norm=rf_norm)                                                                                                                                                                                                                                                         
+    if exp_idx == 0:
+        ax.set_title('2030', fontsize=12)
+    ax.set_ylabel(scenarios[exp_idx], fontsize=10)
+
+# plot 2080
+for exp_idx in range(len(experiment_names)):
+    ax = axes[exp_idx, 1]
+    RF_to_plot = make_3d(revelle_factors[exp_idx, 1, :], ocnmask)[:, :, 0]
+    ax.contourf(model_lon, model_lat, RF_to_plot, cmap='viridis', norm=rf_norm)                                                                                                                                                                                                                                                         
+    if exp_idx == 0:
+        ax.set_title('2080', fontsize=12)
+
+# plot difference
+for exp_idx in range(len(experiment_names)):
+    ax = axes[exp_idx, 2]
+    RF_to_plot = make_3d(revelle_factors[exp_idx, 1, :], ocnmask)[:, :, 0] - make_3d(revelle_factors[exp_idx, 0, :], ocnmask)[:, :, 0]
+    ax.contourf(model_lon, model_lat, RF_to_plot, cmap='seismic', norm=rf_diff_norm)                                                                                                                                                                                                                                                         
+    if exp_idx == 0:
+        ax.set_title('difference', fontsize=12)    
+
+fig.colorbar(plt.cm.ScalarMappable(norm=rf_norm, cmap='viridis'), ax=axes[:, :2], fraction=0.03, pad=0.02, label='Revelle factor')
+fig.colorbar(plt.cm.ScalarMappable(norm=rf_diff_norm, cmap='seismic'), ax=axes[:, 2], fraction=0.03, pad=0.02, label='Difference')
+
+#%% make transect plots: three columns (2030, 2080, difference) and four rows (one for each)
+fig, axes = plt.subplots(4, 3, figsize=(12, 12), dpi=200)
+# fig.suptitle('Revelle Factors', fontsize=16, weight='bold')
+
+# model_lon[105] = 149 ºW (Pacific)
+# model_lon[167] = 25 ºW (Atlantic)
+# model_lon[45] = 91 ºE (Indian)
+
+lon_idx = 105
+
+rf_norm = plt.Normalize(vmin=8, vmax=20)
+rf_diff_norm = plt.Normalize(vmin=-5, vmax=5)
+
+# plot 2030
+for exp_idx in range(len(experiment_names)):
+    ax = axes[exp_idx, 0]
+    RF_to_plot = make_3d(revelle_factors[exp_idx, 0, :], ocnmask)[:, lon_idx, :]
+    ax.contourf(model_lat, model_depth, RF_to_plot.T, cmap='viridis', norm=rf_norm)                                                                                                                                                                                                                                                         
+    if exp_idx == 0:
+        ax.set_title('2030', fontsize=12)
+    ax.set_ylabel(scenarios[exp_idx], fontsize=10)
+    ax.invert_yaxis()
+
+# plot 2080
+for exp_idx in range(len(experiment_names)):
+    ax = axes[exp_idx, 1]
+    RF_to_plot = make_3d(revelle_factors[exp_idx, 1, :], ocnmask)[:, lon_idx, :]
+    ax.contourf(model_lat, model_depth, RF_to_plot.T, cmap='viridis', norm=rf_norm)                                                                                                                                                                                                                                                         
+    if exp_idx == 0:
+        ax.set_title('2080', fontsize=12)
+    ax.invert_yaxis()
+
+# plot difference
+for exp_idx in range(len(experiment_names)):
+    ax = axes[exp_idx, 2]
+    RF_to_plot = make_3d(revelle_factors[exp_idx, 1, :], ocnmask)[:, lon_idx, :] - make_3d(revelle_factors[exp_idx, 0, :], ocnmask)[:, lon_idx, :]
+    ax.contourf(model_lat, model_depth, RF_to_plot.T, cmap='seismic', norm=rf_diff_norm)                                                                                                                                                                                                                                                         
+    if exp_idx == 0:
+        ax.set_title('difference', fontsize=12)    
+    ax.invert_yaxis()
+
+fig.colorbar(plt.cm.ScalarMappable(norm=rf_norm, cmap='viridis'), ax=axes[:, :2], fraction=0.03, pad=0.02, label='Revelle factor')
+fig.colorbar(plt.cm.ScalarMappable(norm=rf_diff_norm, cmap='seismic'), ax=axes[:, 2], fraction=0.03, pad=0.02, label='Difference')
+
+#%% line plot of pressure by index
+vmin = -50
+vmax = 6000
+plt.plot(flatten(pressure_3D,ocnmask), c='gray')
+plt.vlines(new_layer_idx, vmin, vmax, colors='gainsboro', ls=':')
+plt.title('pressure (dbar)')
+plt.xlim([-1000, np.sum(ocnmask)+1000])
+plt.ylim([vmin, vmax])
+plt.show()
+
+#%% line plot of salinity by index
+vmin = 14
+vmax = 41
+plt.plot(flatten(S_3D,ocnmask), c='skyblue')
+plt.vlines(new_layer_idx, vmin, vmax, colors='gainsboro', ls=':')
+plt.title('salinity')
+plt.xlim([-1000, np.sum(ocnmask)+1000])
+plt.ylim([vmin, vmax])
+plt.show()
+
+#%% line plot of temperature by index
+vmin = -5
+vmax = 35
+plt.plot(flatten(T_3D,ocnmask), c='salmon')
+plt.vlines(new_layer_idx, vmin, vmax, colors='gainsboro', ls=':')
+plt.title('temperature (ºC)')
+plt.xlim([-1000, np.sum(ocnmask)+1000])
+plt.ylim([vmin, vmax])
+plt.show()
+
+#%% line plot of silicate by index
+vmin = -10
+vmax = 300
+plt.plot(flatten(Si_3D,ocnmask), c='plum')
+plt.vlines(new_layer_idx, vmin, vmax, colors='gainsboro', ls=':')
+plt.title('silicate (µmol kg-1)')
+plt.xlim([-1000, np.sum(ocnmask)+1000])
+plt.ylim([vmin, vmax])
+plt.show()
+
+#%% line plot of phosphate by index
+vmin = -0.5
+vmax = 3.6
+plt.plot(flatten(P_3D,ocnmask), c='mediumaquamarine')
+plt.vlines(new_layer_idx, vmin, vmax, colors='gainsboro', ls=':')
+plt.title('phosphate (µmol kg-1)')
+plt.xlim([-1000, np.sum(ocnmask)+1000])
+plt.ylim([vmin, vmax])
+plt.show()
+
+#%% line plots of DIC by index
+vmin = -500
+vmax = 2500
+for t_idx in range(0,len(ds.time)):
+    plt.plot(flatten(ds.isel(time=t_idx).delDIC.values,ocnmask) + flatten(DIC_3D,ocnmask), c='steelblue')
+    plt.vlines(new_layer_idx, vmin, vmax, colors='gainsboro', ls=':')
+    plt.title('DIC (µmol kg-1) at t = ' + str(t_idx))
+    plt.xlim([-1000, np.sum(ocnmask)+1000])
+    plt.ylim([vmin, vmax])
+    plt.show()
+
+#%% line plots of AT by index
+vmin = -6000
+vmax = 4000
+for t_idx in range(0,len(ds.time)):
+    plt.plot(flatten(ds.isel(time=t_idx).delAT.values,ocnmask) + flatten(AT_3D,ocnmask), c='goldenrod')
+    plt.vlines(new_layer_idx, vmin, vmax, colors='gainsboro', ls=':')
+    plt.title('AT (µmol kg-1) at t = ' + str(t_idx))
+    plt.xlim([-1000, np.sum(ocnmask)+1000])
+    plt.ylim([vmin, vmax])
+    plt.show()
+    
+#%% line plots of pH by index
+vmin = 2
+vmax = 10
+for t_idx in range(0,len(ds.time)):
+    co2sys = pyco2.sys(
+        alkalinity=flatten(ds.isel(time=t_idx).delAT.values,ocnmask) + flatten(AT_3D,ocnmask),
+        dic=flatten(ds.isel(time=t_idx).delDIC.values,ocnmask) + flatten(DIC_3D,ocnmask),
+        salinity=S,
+        temperature=T,
+        pressure=pressure,
+        total_silicate=Si,
+        total_phosphate=P)
+    
+    pH_plot = co2sys['pH']
+    
+    plt.plot(pH_plot, c='lightpink')
+    plt.vlines(new_layer_idx, vmin, vmax, colors='gainsboro', ls=':')
+    plt.title('pH at t = ' + str(t_idx))
+    plt.xlim([-1000, np.sum(ocnmask)+1000])
+    plt.ylim([vmin, vmax])
+    plt.show()
+
+#%% plot surface pH
+co2sys = pyco2.sys(
+    alkalinity=flatten(ds.isel(time=1).delAT.values,ocnmask) + flatten(AT_3D,ocnmask),
+    dic=flatten(ds.isel(time=1).delDIC.values,ocnmask) + flatten(DIC_3D,ocnmask),
+    salinity=S,
+    temperature=T,
+    pressure=pressure,
+    total_silicate=Si,
+    total_phosphate=P)
+
+pH_plot = co2sys['pH']
+pH_plot_3D = make_3d(pH_plot,ocnmask)
+plot_surface2d(model_lon, model_lat, pH_plot_3D[0,:,:], 2, 10, 'viridis', 'pH (t = 15, depth = ' + str(np.round(model_depth[4], 2)) + ' m)')
+#plt.ylim([-500, 2500])
+plt.show()
+
+#%% line plots of AT added by index
+vmin = -50
+vmax = 250
+for t_idx in range(0,len(ds.time)):
+    plt.plot(flatten(ds.isel(time=t_idx).AT_added.values,ocnmask), c='darkgoldenrod')
+    plt.vlines(new_layer_idx, vmin, vmax, colors='gainsboro', ls=':')
+    plt.title('AT added (µmol kg-1) at t = ' + str(t_idx))
+    plt.xlim([-1000, np.sum(ocnmask)+1000])
+    plt.ylim([vmin, vmax])
+    plt.show()
+
+#%% animations of tracers
+# AT added
+ds = xr.open_dataset('/Volumes/LaCie/outputs/exp22_2026-02-06_t1_none_000.nc')
+make_surf_animation(ds.AT_added, 'AT Added (µmol kg-1)', model_lat, model_lon, ds.time.values, len(ds.time.values), 0, 150, 'viridis', 'exp22_2026-02-06_t1_none_AT_added.mp4')
+
+# delDIC
+ds = xr.open_dataset('/Volumes/LaCie/outputs/exp22_2026-02-06_t1_none_000.nc')
+make_surf_animation(ds.delDIC, 'Change in DIC (µmol kg-1)', model_lat, model_lon, ds.time.values, len(ds.time.values), -250, 250, 'RdBu', 'exp22_2026-02-06_t1_none_delDIC.mp4')
+
+#%% animation of deviation from preindustrial pH
+ds = xr.open_dataset('/Volumes/LaCie/outputs/exp22_2026-02-06_t1_none_000.nc')
+DIC_start_ds = xr.DataArray(DIC_start_3D, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+AT_ds = xr.DataArray(AT_3D, dims=["lat", "lon", "depth"], coords={"lat": ds.lat, "lon": ds.lon, "depth": ds.depth})
+
+# wrap GLODAP DIC in xarray dataset to convert ∆DIC to total DIC over time
+DIC_modeled_3D = ds['delDIC'] + DIC_start_ds
+    
+# same for ∆AT to AT
+AT_modeled_3D = ds['delAT'] + AT_ds
+    
+pH_modeled = []
+    
+for idx in tqdm(range(len(ds['time']))):
+        
+    AT_modeled = flatten(AT_modeled_3D.isel(time=idx).values, ocnmask)
+    DIC_modeled = flatten(DIC_modeled_3D.isel(time=idx).values, ocnmask)
+
+    #  call co2sys to calculate pH
+    co2sys = pyco2.sys(
+        alkalinity=AT_modeled,
+        dic=DIC_modeled,
+        salinity=S,
+        temperature=T,
+        pressure=pressure,
+        total_silicate=Si,
+        total_phosphate=P)
+        
+    pH_modeled.append(co2sys['pH'] - pH_preind)
+
+make_surf_animation_pH(pH_modeled, 'Deviation of pH from preindustrial', model_lat, model_lon, ds.time.values, len(ds.time.values), ocnmask, -0.2, 0.2, 'RdBu', 'exp22_2026-02-06_t1_none_pH_deviation_preind.mp4')
+
+#%% Canth
+
+
+#%%
