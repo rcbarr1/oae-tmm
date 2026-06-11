@@ -24,8 +24,8 @@ from tqdm import tqdm
 
 # load model architecture
 data_path = './data/'
-# output_path = './outputs/'
-output_path = '/Volumes/LaCie/outputs/'
+output_path = './outputs/'
+# output_path = '/Volumes/LaCie/outputs/'
 
 # load transport matrix (OCIM2-48L, from Holzer et al., 2021)
 # transport matrix is referred to as "A" vector in John et al., 2020 (AWESOME OCIM)

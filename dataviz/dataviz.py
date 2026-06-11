@@ -22,7 +22,8 @@ def get_co2_scenario(scenario, times):
     'ssp370', 'ssp370_lowNTCF', 'ssp434', 'ssp460', 'ssp534_OS'.
     """
     scenarios = {'none': 1, 'ssp119': 2, 'ssp126': 3, 'ssp245': 4, 'ssp370': 5,
-                 'ssp370_lowNTCF': 6, 'ssp434': 7, 'ssp460': 8, 'ssp534_OS': 9}
+                 'ssp370_lowNTCF': 6, 'ssp434': 7, 'ssp460': 8, 'ssp534_OS': 9,
+                 'REMIND': 10}
 
     if scenario not in scenarios:
         raise ValueError(f"Invalid value: {scenario!r}. Must be one of: {', '.join(scenarios.keys())}")
@@ -35,7 +36,7 @@ def get_co2_scenario(scenario, times):
     if scenario != 'none':
         atmospheric_CO2 = np.interp(times, CO2_data_years, CO2_data)
     else:
-        if times[0] >= 2020:
+        if times[0] > 2022:
             warnings.warn("'none' scenario chosen, but time > 2022 selected. "
                           "Canth is based on a linear extrapolation from 2012-2022 in this case.")
         atmospheric_CO2 = np.interp(times[0], CO2_data_years, CO2_data) * np.ones_like(times)
@@ -82,7 +83,7 @@ def plot_surface3d(lats, lons, variable, depth_level, vmin, vmax, cmap, title, l
     plt.ylabel('latitude (ºN)')
     plt.title(title)
 
-    if lon_lims==None:
+    if lon_lims is None:
         plt.xlim([0, 360]), plt.ylim([-90,90])
     else:
         plt.ylim([-90,90])
@@ -159,6 +160,27 @@ def plot_lmes(lme_masks, ocnmask, lats, lons):
 
 
 def make_surf_animation(variable, colorbar_label, model_lat, model_lon, t, nt, vmin, vmax, cmap, filename):
+    """Animate a surface (depth=0) field over time and save to an mp4 file.
+
+    Parameters
+    ----------
+    variable : xarray.DataArray
+        4D DataArray with dims (time, lat, lon, depth); depth=0 slice is plotted.
+    colorbar_label : str
+        Label for the colorbar.
+    model_lat, model_lon : np.ndarray
+        1D arrays of OCIM2-48L latitudes [°N] and longitudes [°E].
+    t : np.ndarray
+        1D array of time values (decimal years) for frame titles.
+    nt : int
+        Number of frames to render.
+    vmin, vmax : float
+        Colorscale limits.
+    cmap : str
+        Matplotlib colormap name.
+    filename : str
+        Output mp4 path.
+    """
     fig, ax = plt.subplots(figsize=(10,7))
 
     cntr = ax.contourf(model_lon, model_lat,
@@ -187,6 +209,30 @@ def make_surf_animation(variable, colorbar_label, model_lat, model_lon, t, nt, v
 
 
 def make_surf_animation_pH(pH, colorbar_label, model_lat, model_lon, t, nt, ocnmask, vmin, vmax, cmap, filename):
+    """Animate a surface pH field (stored as a flat 1D vector per timestep) over time and save to mp4.
+
+    Parameters
+    ----------
+    pH : list of np.ndarray
+        List of length nt; each element is a 1D flattened array of pH values
+        (ocean cells only, matching the flattened ocnmask ordering).
+    colorbar_label : str
+        Label for the colorbar.
+    model_lat, model_lon : np.ndarray
+        1D arrays of OCIM2-48L latitudes [°N] and longitudes [°E].
+    t : np.ndarray
+        1D array of time values (decimal years) for frame titles.
+    nt : int
+        Number of frames to render.
+    ocnmask : np.ndarray
+        Integer mask of shape (n_lat, n_lon, n_depth); used to expand pH back to 3D.
+    vmin, vmax : float
+        Colorscale limits.
+    cmap : str
+        Matplotlib colormap name.
+    filename : str
+        Output mp4 path.
+    """
     fig, ax = plt.subplots(figsize=(10,7))
 
     pH_3D = make_3D(pH[0], ocnmask)
@@ -217,6 +263,29 @@ def make_surf_animation_pH(pH, colorbar_label, model_lat, model_lon, t, nt, ocnm
 
 
 def make_section_animation(variable, colorbar_label, model_depth, model_lat, t, nt, vmin, vmax, cmap, filename):
+    """Animate a latitude–depth section at lon index 90 (≈181°E) over time and save to mp4.
+
+    Parameters
+    ----------
+    variable : xarray.DataArray
+        4D DataArray with dims (time, lat, lon, depth).
+    colorbar_label : str
+        Label for the colorbar.
+    model_depth : np.ndarray
+        1D array of OCIM2-48L depth levels [m].
+    model_lat : np.ndarray
+        1D array of OCIM2-48L latitudes [°N].
+    t : np.ndarray
+        1D array of time values (decimal years) for frame titles.
+    nt : int
+        Number of frames to render.
+    vmin, vmax : float
+        Colorscale limits.
+    cmap : str
+        Matplotlib colormap name.
+    filename : str
+        Output mp4 path.
+    """
     fig, ax = plt.subplots(figsize=(10,7))
 
     cntr = ax.contourf(model_lat, model_depth,
@@ -247,6 +316,32 @@ def make_section_animation(variable, colorbar_label, model_depth, model_lat, t, 
 
 
 def make_section_animation_pH(pH, colorbar_label, model_depth, model_lat, t, nt, ocnmask, vmin, vmax, cmap, filename):
+    """Animate a latitude–depth pH section at lon index 90 (≈181°E) over time and save to mp4.
+
+    Parameters
+    ----------
+    pH : list of np.ndarray
+        List of length nt; each element is a 1D flattened array of pH values
+        (ocean cells only, matching the flattened ocnmask ordering).
+    colorbar_label : str
+        Label for the colorbar.
+    model_depth : np.ndarray
+        1D array of OCIM2-48L depth levels [m].
+    model_lat : np.ndarray
+        1D array of OCIM2-48L latitudes [°N].
+    t : np.ndarray
+        1D array of time values (decimal years) for frame titles.
+    nt : int
+        Number of frames to render.
+    ocnmask : np.ndarray
+        Integer mask of shape (n_lat, n_lon, n_depth); used to expand pH back to 3D.
+    vmin, vmax : float
+        Colorscale limits.
+    cmap : str
+        Matplotlib colormap name.
+    filename : str
+        Output mp4 path.
+    """
     fig, ax = plt.subplots(figsize=(10,7))
 
     pH_3D = make_3D(pH[0], ocnmask)
