@@ -73,14 +73,19 @@ class LCA1(BaseExperiment):
         one-month pulse of the original experiment design.
         """
         q = np.zeros(1 + 2 * self.m)
+        assert self.cfg.start_CDR is not None
         t_elapsed = t_current - self.cfg.start_CDR
         if t_elapsed < 0.0834:
-            AT_amount_tons = self.cfg.attrs['AT_amount_tons']
+            attrs = self.cfg.attrs
+            assert attrs is not None
+            AT_amount_tons = attrs['AT_amount_tons']
             V       = self.grid['cell_volume']   # (m,) flattened volumes [m^3]
             rho     = self.grid['rho']
-            sw_mass = np.sum(V * self.cfg.q_AT_mask) * rho  # [kg] seawater at target cell
+            q_AT_mask = self.cfg.q_AT_mask
+            assert q_AT_mask is not None
+            sw_mass = np.sum(V * q_AT_mask) * rho  # [kg] seawater at target cell
             # metric tons → µmol → normalize by sw_mass → annualize (×12 for monthly flux)
-            q[(self.m+1):] = self.cfg.q_AT_mask * AT_amount_tons * 1e6 / 17.007 * 1e6 * 12 / sw_mass
+            q[(self.m+1):] = q_AT_mask * AT_amount_tons * 1e6 / 17.007 * 1e6 * 12 / sw_mass
         return q
 
 

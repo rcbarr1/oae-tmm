@@ -137,7 +137,7 @@ def interp_trace(data_path, time, scenario, latitude, longitude, depth, ocnmask)
     canth = trace_data['canth'].transpose('lat', 'lon', 'depth').copy().values
 
     interp = RegularGridInterpolator(
-        (trace_lat, trace_lon, trace_depth), canth, bounds_error=False, fill_value=None,
+        (trace_lat, trace_lon, trace_depth), canth, bounds_error=False, fill_value=None,  # type: ignore[arg-type]
     )
 
     # TRACE longitude runs 20°E–380°E; temporarily shift OCIM longitudes < 20°E to match

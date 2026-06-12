@@ -65,7 +65,7 @@ def regrid_glodap(data_path: str, glodap_var: str, latitude: np.ndarray,
     var = glodap_data[glodap_var].transpose('lat', 'lon', 'depth_surface').copy().values
 
     interp = RegularGridInterpolator(
-        (glodap_lat, glodap_lon, glodap_depth), var, bounds_error=False, fill_value=None
+        (glodap_lat, glodap_lon, glodap_depth), var, bounds_error=False, fill_value=None  # type: ignore[arg-type]
     )
 
     # GLODAP longitudes run from 20E to 380E; shift model lons to match
@@ -154,7 +154,7 @@ def regrid_woa(data_path: str, woa_var: str, latitude: np.ndarray,
         var = data.p_an.isel(time=0).transpose('lat', 'lon', 'depth').values
 
     interp = RegularGridInterpolator(
-        (data_lat, data_lon, data_depth), var, bounds_error=False, fill_value=None
+        (data_lat, data_lon, data_depth), var, bounds_error=False, fill_value=None  # type: ignore[arg-type]
     )
 
     lat_grid, lon_grid, depth_grid = np.meshgrid(latitude, longitude, depth, indexing='ij')
@@ -219,7 +219,7 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, latitude: np.ndarray,
     data_lon = data['lon'].to_numpy()
 
     interp = RegularGridInterpolator(
-        (data_lat, data_lon), var, bounds_error=False, fill_value=None
+        (data_lat, data_lon), var, bounds_error=False, fill_value=None  # type: ignore[arg-type]
     )
 
     lat_grid, lon_grid = np.meshgrid(latitude, longitude, indexing='ij')
@@ -283,7 +283,7 @@ def regrid_cobalt(cobalt_vrbl, latitude: np.ndarray, longitude: np.ndarray,
     
     interp = RegularGridInterpolator(
         (cobalt_lat, cobalt_lon, cobalt_depth), var, method='linear',
-        bounds_error=False, fill_value=None
+        bounds_error=False, fill_value=None  # type: ignore[arg-type]
     )
 
     lat_grid, lon_grid, depth_grid = np.meshgrid(latitude, longitude, depth, indexing='ij')

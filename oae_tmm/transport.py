@@ -35,6 +35,8 @@ Carbonate chemistry linearization similar to Nowicki et al. (2024).
 Transport matrix setup similar to Yamamoto et al. (2024).
 """
 
+from typing import Optional
+
 import numpy as np
 from scipy import sparse
 from petsc4py import PETSc
@@ -164,7 +166,7 @@ def build_A_matrix(
         sparse.csr_matrix(np.zeros((m, 1))), 0 * TR, TR
     ])
 
-    return sparse.vstack([
+    return sparse.vstack([  # type: ignore[return-value]
         sparse.csr_matrix(A0_[np.newaxis, :]),
         A1_,
         A2_,
@@ -186,7 +188,7 @@ def solve_timestep(
     c_prev: np.ndarray,
     q: np.ndarray,
     dt: float,
-    solver_opts: dict = None,
+    solver_opts: Optional[dict] = None,
 ) -> np.ndarray:
     """Advance the state vector by one implicit Euler step.
 
@@ -226,13 +228,13 @@ def solve_timestep(
     RHS = c_prev + dt * q
 
     # convert matricies from SciPy sparse to PETSc to parallelize
-    LHS_petsc = PETSc.Mat().createAIJ(
+    LHS_petsc = PETSc.Mat().createAIJ(  # type: ignore[attr-defined]
         size=LHS.shape, csr=(LHS.indptr, LHS.indices, LHS.data)
     )
-    RHS_petsc = PETSc.Vec().createWithArray(RHS)
+    RHS_petsc = PETSc.Vec().createWithArray(RHS)  # type: ignore[attr-defined]
 
     # set up PETSc solver
-    ksp = PETSc.KSP().create()
+    ksp = PETSc.KSP().create()  # type: ignore[attr-defined]
     ksp.setOperators(LHS_petsc)
     ksp.setType(opts['type'])
     ksp.setGMRESRestart(opts['restart'])

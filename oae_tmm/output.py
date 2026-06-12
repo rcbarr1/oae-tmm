@@ -35,7 +35,7 @@ reading a single timestep never loads the entire file. zlib complevel=4.
 from typing import Optional
 
 import numpy as np
-from netCDF4 import Dataset
+from netCDF4 import Dataset  # type: ignore[import-untyped]
 
 from oae_tmm.grid import make_3d
 

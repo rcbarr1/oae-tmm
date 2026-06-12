@@ -37,12 +37,16 @@ class Exp26(BaseExperiment):
 
     def setup(self):
         super().setup()
-        self.k = self.k * self.cfg.attrs['k_scale_factor']
+        attrs = self.cfg.attrs
+        assert attrs is not None
+        self.k = self.k * attrs['k_scale_factor']
 
-    def make_q(self, t_current: float, _chem: dict, dt: float) -> np.ndarray:
+    def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
         q = np.zeros(1 + 2 * self.m)
         if not self._at_pulse_done:
-            q[(self.m + 1):] = self.cfg.q_AT_mask / dt  # [µmol AT kg-1 yr-1]
+            q_AT_mask = self.cfg.q_AT_mask
+            assert q_AT_mask is not None
+            q[(self.m + 1):] = q_AT_mask / dt  # [µmol AT kg-1 yr-1]
             self._at_pulse_done = True
         return q
 

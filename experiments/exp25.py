@@ -39,11 +39,13 @@ class Exp25(BaseExperiment):
         if self._q_CT_mask is None:
             ocnmask = self.grid['ocnmask']
             mask_3d = np.zeros(ocnmask.shape)
-            mask_3d[self.cfg.attrs['cell_lat_idx'], self.cfg.attrs['cell_lon_idx'], 0] = 1
+            attrs = self.cfg.attrs
+            assert attrs is not None
+            mask_3d[attrs['cell_lat_idx'], attrs['cell_lon_idx'], 0] = 1
             self._q_CT_mask = flatten(mask_3d, ocnmask)
         return self._q_CT_mask
 
-    def make_q(self, t_current: float, _chem: dict, dt: float) -> np.ndarray:
+    def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
         q = np.zeros(1 + 2 * self.m)
         t_offset = t_current - self.cfg.start_year
         if t_offset < 30.5 / 360:
