@@ -21,6 +21,14 @@ import matplotlib.ticker as mticker
 from oae_tmm import loaders
 from oae_tmm.grid import make_3d
 
+# notes about these test files: exp22 and exp23 pre and post-refactor are not 
+# the same because I changed the mldmask calculation logic to not include cells 
+# that crossed the MLD boundary. this means less AT is added per time step, so 
+# less xCO2 change. All experiments changed slightly because I changed the 
+# definition of K0 to be based on fCO2, not pCO2, which is more correct. 
+# However, earlier testing before these changes showed that outputs were the 
+# same to numerical precision before and after the refactor.
+
 test_files = ['exp22_2026-06-12_test_ssp126_000.nc',
               'exp22_TEST_000.nc', # before refactor
               'exp23_2026-06-12_test_ssp126_000.nc',
