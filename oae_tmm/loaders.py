@@ -83,18 +83,19 @@ def load_ocim(data_path: str) -> dict:
     Returns
     -------
     dict with keys:
-        TR             : scipy sparse matrix (m x m), ocean transport operator
-        ocnmask        : np.ndarray (n_lat, n_lon, n_depth), 1 = ocean, 0 = land
-        latitude       : np.ndarray (n_lat,), latitude of grid cell centers [degrees N]
-        longitude      : np.ndarray (n_lon,), longitude of grid cell centers [degrees E]
-        depth          : np.ndarray (n_depth,), depth of layer centers [m]
-        cell_volume    : np.ndarray (m,), grid cell volumes [m^3]
-        cell_top_depth : np.ndarray (m,), depth of the top of each grid cell [m]
-        pressure       : np.ndarray (m,), pressure at each ocean cell [dbar]
-        mld            : np.ndarray (n_lat, n_lon), annual mean mixed layer depth [m]
-        z1             : float, thickness of the surface model layer [m]
-        surf_idx       : np.ndarray (n_surface_cells, 1), flat indices of surface ocean cells
-        rho            : float, reference seawater density [kg m^-3]
+        TR          : scipy sparse matrix (m x m), ocean transport operator
+        ocnmask     : np.ndarray (n_lat, n_lon, n_depth), 1 = ocean, 0 = land
+        mldmask     : np.ndarray (n_lat, n_lon, n_depth), 1 = ocean cell within MLD, 0 otherwise
+        latitude    : np.ndarray (n_lat,), latitude of grid cell centers [degrees N]
+        longitude   : np.ndarray (n_lon,), longitude of grid cell centers [degrees E]
+        depth       : np.ndarray (n_depth,), depth of layer centers [m]
+        cell_volume : np.ndarray (m,), grid cell volumes [m^3]
+        cell_area   : np.ndarray (m,), horizontal area of each grid cell [m^2]
+        pressure    : np.ndarray (m,), pressure at each ocean cell [dbar]
+        mld         : np.ndarray (n_lat, n_lon), annual mean mixed layer depth [m]
+        z1          : float, thickness of the surface model layer [m]
+        surf_idx    : np.ndarray (n_surface_cells, 1), flat indices of surface ocean cells
+        rho         : float, reference seawater density [kg m^-3]
     """
     # transport matrix (Holzer et al. 2021)
     mat = load_mat(data_path + 'OCIM2_48L_base/OCIM2_48L_base_transport.mat')
@@ -107,12 +108,15 @@ def load_ocim(data_path: str) -> dict:
     longitude = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()      # degrees E
     depth     = model_data['tz'].isel(longitude=0, latitude=0).to_numpy()    # m below sea surface
     cell_volume = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy()  # m^3
+    cell_area   = model_data['area'].transpose('latitude', 'longitude', 'depth').to_numpy()  # m^2
 
     # wz: depth of the top of each layer (W-grid interfaces); wz[0]=0 (sea surface),
     # z1 = wz[1] = top of cell 1 = bottom of cell 0 = surface layer thickness
-    cell_top_depth_3d = model_data['wz'].transpose('latitude', 'longitude', 'depth').to_numpy()  # m
+    cell_top_depth_3d    = model_data['wz'].transpose('latitude', 'longitude', 'depth').to_numpy()  # m
+    cell_bottom_depth_3d = cell_top_depth_3d + cell_volume / cell_area  # m
     z1 = cell_top_depth_3d[0, 0, 1]
     mld = model_data['mld'].transpose('latitude', 'longitude').to_numpy()  # m
+    mldmask = ((cell_bottom_depth_3d < mld[:, :, None]) * ocnmask).astype(int)
 
     surf_idx = get_depth_idx(ocnmask, 0)  # indices of surface grid cells in flattened ocean vector
     rho = 1025  # reference seawater density [kg m^-3]
@@ -121,18 +125,19 @@ def load_ocim(data_path: str) -> dict:
     depth_3d = np.broadcast_to(depth[np.newaxis, np.newaxis, :], ocnmask.shape)
 
     return {
-        'TR':             TR,
-        'ocnmask':        ocnmask,
-        'latitude':       latitude,
-        'longitude':      longitude,
-        'depth':          depth,
-        'cell_volume':    flatten(cell_volume, ocnmask),
-        'cell_top_depth': flatten(cell_top_depth_3d, ocnmask),
-        'pressure':       flatten(depth_3d, ocnmask),
-        'mld':            mld,
-        'z1':             z1,
-        'surf_idx':       surf_idx,
-        'rho':            rho,
+        'TR':          TR,
+        'ocnmask':     ocnmask,
+        'mldmask':     mldmask,
+        'latitude':    latitude,
+        'longitude':   longitude,
+        'depth':       depth,
+        'cell_volume': flatten(cell_volume, ocnmask),
+        'cell_area':   flatten(cell_area, ocnmask),
+        'pressure':    flatten(depth_3d, ocnmask),
+        'mld':         mld,
+        'z1':          z1,
+        'surf_idx':    surf_idx,
+        'rho':         rho,
     }
 
 

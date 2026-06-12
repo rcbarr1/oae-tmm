@@ -497,58 +497,66 @@ def test_output_write_step():
 # ── MLD mask logic ───────────────────────────────────────────────────────────
 
 def test_mld_mask():
-    """MLD mask: cells fully within the mixed layer = cell bottom depth < MLD.
+    """mldmask: 1 where cell bottom depth (vol/area + top) < MLD, 0 otherwise.
 
-    Bottom of cell k = top of cell k+1 (shifted cell_top_depth_3d).
-    Deepest cell gets inf bottom depth → never included.
+    Uses actual cell bottom depths rather than nan-padded shifted tops, so the
+    deepest ocean cell in each column is correctly included when the MLD extends
+    to or past the seafloor.
     """
     print('\n--- MLD mask logic ---')
     passed = True
 
-    # 1×2 spatial grid, 4 depth levels
-    # cell_top_depth_3d[lat, lon, k] = depth of the top of cell k
-    cell_top_depth_3d = np.array([[[  0.,  50., 100., 200.],   # lon 0
-                                   [  0.,  30.,  80., 180.]]])  # lon 1  shape (1,2,4)
-    mld = np.array([[75., 95.]])   # shape (1,2)
+    # ── Standard cases ────────────────────────────────────────────────────────
+    # 1×2 spatial grid, 4 depth levels, all ocean
+    ocnmask_std = np.ones((1, 2, 4), dtype=int)
+    cell_bottom_depth_3d_std = np.array([[[  50., 100., 200., 400.],   # lon 0
+                                          [  30.,  80., 180., 360.]]])  # lon 1
+    mld_std = np.array([[75., 95.]])
+    mldmask_std = ((cell_bottom_depth_3d_std < mld_std[:, :, None]) * ocnmask_std).astype(int)
 
-    cell_bottom_depth_3d = np.concatenate(
-        [cell_top_depth_3d[:, :, 1:], np.full((*cell_top_depth_3d.shape[:2], 1), np.inf)],
-        axis=2,
-    )
-    mldmask = (cell_bottom_depth_3d < mld[:, :, None]).astype(int)
+    # lon 0: bottoms=[50,100,200,400], MLD=75 → only cell 0 (bottom=50) qualifies
+    passed &= _check(list(mldmask_std[0, 0]) == [1, 0, 0, 0],
+                     f'lon 0 (MLD=75m): expected [1,0,0,0], got {list(mldmask_std[0, 0])}')
 
-    # lon 0: bottoms=[50,100,200,inf], MLD=75 → only cell 0 (bottom=50) qualifies
-    passed &= _check(list(mldmask[0, 0]) == [1, 0, 0, 0],
-                     f'lon 0 (MLD=75m): expected [1,0,0,0], got {list(mldmask[0, 0])}')
+    # lon 1: bottoms=[30,80,180,360], MLD=95 → cells 0 and 1 qualify (bottoms 30 and 80 < 95)
+    passed &= _check(list(mldmask_std[0, 1]) == [1, 1, 0, 0],
+                     f'lon 1 (MLD=95m): expected [1,1,0,0], got {list(mldmask_std[0, 1])}')
 
-    # lon 1: bottoms=[30,80,180,inf], MLD=95 → cells 0 and 1 qualify (bottoms 30 and 80 < 95)
-    passed &= _check(list(mldmask[0, 1]) == [1, 1, 0, 0],
-                     f'lon 1 (MLD=95m): expected [1,1,0,0], got {list(mldmask[0, 1])}')
-
-    # Strict inequality: cell whose bottom == MLD is NOT included
-    cell_top_exact = np.array([[[0., 50., 100., 200.]]])   # shape (1,1,4)
-    mld_exact      = np.array([[50.]])                     # MLD == bottom of cell 0
-    cell_bottom_exact = np.concatenate(
-        [cell_top_exact[:, :, 1:], np.full((*cell_top_exact.shape[:2], 1), np.inf)],
-        axis=2,
-    )
-    mldmask_exact = (cell_bottom_exact < mld_exact[:, :, None]).astype(int)
+    # ── Strict inequality ─────────────────────────────────────────────────────
+    ocnmask_eq = np.ones((1, 1, 4), dtype=int)
+    mld_exact  = np.array([[50.]])
+    cell_bottom_exact = np.array([[[50., 100., 200., 400.]]])
+    mldmask_exact = ((cell_bottom_exact < mld_exact[:, :, None]) * ocnmask_eq).astype(int)
     passed &= _check(mldmask_exact[0, 0, 0] == 0,
                      f'strict <: bottom=MLD=50 excluded (got {mldmask_exact[0, 0, 0]})')
 
-    # Deepest cell always excluded (padded with inf)
-    passed &= _check(mldmask[0, 0, -1] == 0 and mldmask[0, 1, -1] == 0,
-                     'deepest cell always excluded (inf bottom depth)')
+    # ── Edge case: MLD extends to or past the actual seafloor ─────────────────
+    # lon 0: 2 cells deep, seafloor at 100 m; lon 1: 1 cell deep, seafloor at 100 m
+    ocnmask_edge = np.zeros((1, 2, 4), dtype=int)
+    ocnmask_edge[0, 0, :2] = 1
+    ocnmask_edge[0, 1, :1] = 1
+    cell_bottom_depth_3d_edge = np.full((1, 2, 4), np.nan)
+    cell_bottom_depth_3d_edge[0, 0, :2] = [50., 100.]
+    cell_bottom_depth_3d_edge[0, 1, :1] = [100.]
 
-    # bottom-depth shift: cell_bottom[k] == cell_top[k+1] for all interior cells
-    for k in range(cell_top_depth_3d.shape[2] - 1):
-        passed &= _check(
-            cell_bottom_depth_3d[0, 0, k] == cell_top_depth_3d[0, 0, k + 1],
-            f'cell_bottom[{k}] = cell_top[{k+1}]: '
-            f'{cell_bottom_depth_3d[0,0,k]} == {cell_top_depth_3d[0,0,k+1]}',
-        )
-    passed &= _check(np.isinf(cell_bottom_depth_3d[0, 0, -1]),
-                     f'last cell bottom = inf: got {cell_bottom_depth_3d[0, 0, -1]}')
+    mld_deep = np.array([[120., 120.]])
+    mldmask_deep = ((cell_bottom_depth_3d_edge < mld_deep[:, :, None]) * ocnmask_edge).astype(int)
+
+    # lon 0: MLD=120m past seafloor at 100m → both cells included
+    passed &= _check(list(mldmask_deep[0, 0]) == [1, 1, 0, 0],
+                     f'MLD past seafloor, lon 0: expected [1,1,0,0], got {list(mldmask_deep[0, 0])}')
+
+    # lon 1: single-cell column, MLD=120m past seafloor at 100m → cell included
+    passed &= _check(mldmask_deep[0, 1, 0] == 1,
+                     f'MLD past seafloor, single-cell col: expected 1, got {mldmask_deep[0, 1, 0]}')
+
+    # lon 0: MLD=80m, deepest cell (bottom=100m) not reached → excluded
+    mld_shallow = np.array([[80., 80.]])
+    mldmask_shallow = ((cell_bottom_depth_3d_edge < mld_shallow[:, :, None]) * ocnmask_edge).astype(int)
+    passed &= _check(mldmask_shallow[0, 0, 0] == 1 and mldmask_shallow[0, 0, 1] == 0,
+                     f'MLD=80m, lon 0: expected [1,0,...], got {list(mldmask_shallow[0, 0])}')
+    passed &= _check(mldmask_shallow[0, 1, 0] == 0,
+                     f'MLD=80m, single-cell col: expected 0, got {mldmask_shallow[0, 1, 0]}')
 
     return passed
 
@@ -559,13 +567,17 @@ def test_output_path():
     print('\n--- base.BaseExperiment._output_path ---')
     passed = True
 
+    class _StubExperiment(BaseExperiment):
+        def make_q(self, t_current, chem, dt):
+            return np.zeros(1)
+
     def _exp(output_path, max_steps=0):
         cfg = ExperimentConfig(
             data_path='./data/', output_path=output_path,
             scenario='ssp245', start_year=2020.0,
             times=np.array([0., 1.]), max_steps_per_file=max_steps,
         )
-        return BaseExperiment(cfg)  # type: ignore[abstract]
+        return _StubExperiment(cfg)
 
     # max_steps_per_file=0: always return the original path unchanged
     exp = _exp('./outputs/test.nc', max_steps=0)

@@ -21,7 +21,7 @@ import PyCO2SYS as pyco2
 
 from experiments.base import BaseExperiment, ExperimentConfig, run_cli
 from oae_tmm import loaders
-from oae_tmm.grid import flatten, make_3d
+from oae_tmm.grid import flatten
 
 
 class Exp23(BaseExperiment):
@@ -61,14 +61,7 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     grid    = loaders.load_ocim(data_path)
     ocnmask = grid['ocnmask']
 
-    # mixed-layer mask: 1 where cell bottom depth < local MLD (cells fully within mixed layer)
-    cell_top_depth_3d = make_3d(grid['cell_top_depth'], ocnmask)
-    cell_bottom_depth_3d = np.concatenate(
-        [cell_top_depth_3d[:, :, 1:], np.full((*cell_top_depth_3d.shape[:2], 1), np.inf)],
-        axis=2,
-    )
-    mldmask    = (cell_bottom_depth_3d < grid['mld'][:, :, None]).astype(int)
-    q_AT_mask  = flatten(mldmask * ocnmask, ocnmask)
+    q_AT_mask = flatten(grid['mldmask'], ocnmask)
 
     start_year = 2020.0
     start_CDR  = 2020.0  # same as start_year: CDR begins immediately

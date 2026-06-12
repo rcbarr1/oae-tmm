@@ -15,7 +15,7 @@ Provides two public functions:
 Governing equations encoded in A (units in brackets):
 
     1. d(∆xCO2)/dt = ∆q_sea-air,xCO2                              [µmol CO2 (µmol air)^-1 yr^-1] (same as [µatm CO2 (µatm air)^-1 yr^-1])
-    2. d(∆CT)/dt   = TR * ∆CT + ∆q_air-sea,CT + ∆q_CDR,CT        [µmol CT (kg seawater)^-1 yr^-1]
+    2. d(∆CT)/dt   = TR * ∆CT + ∆q_air-sea,CT + ∆q_CDR,CT         [µmol CT (kg seawater)^-1 yr^-1]
     3. d(∆AT)/dt   = TR * ∆AT  + ∆q_CDR,AT                        [µmol AT (kg seawater)^-1 yr^-1]
 
 Air-sea fluxes depend on ∆c (not on external forcing), so they fold into A
@@ -26,6 +26,8 @@ rather than the source vector q:
 
     where gammax = k * V * (1 - f_ice) / Ma / z1
           gammaC = -k * (1 - f_ice) / z1
+          beta_A = AT/aqueous_CO2
+          beta_C = CT/aqueous_CO2
 
 The time-stepping loop itself lives in experiments/base.py rather than here
 because rebuilding A requires the current carbonate chemistry state, which
