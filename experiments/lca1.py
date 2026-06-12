@@ -20,6 +20,7 @@ CLI usage:
 from datetime import datetime
 
 import numpy as np
+import xarray as xr
 
 from experiments.base import BaseExperiment, ExperimentConfig, run_cli
 from oae_tmm import loaders, trace
@@ -51,8 +52,8 @@ class LCA1(BaseExperiment):
     def setup(self):
         """Load temperature_3d and salinity_3d for pyTRACE, then delegate to BaseExperiment.setup()."""
         base = self.cfg.data_path + 'GLODAPv2.2016b.MappedProduct/'
-        self.temperature_3d = np.load(base + 'temperature.npy')
-        self.salinity_3d = np.load(base + 'salinity.npy')
+        self.temperature_3d = xr.open_dataset(base + 'temperature.nc')['temperature'].values
+        self.salinity_3d = xr.open_dataset(base + 'salinity.nc')['salinity'].values
         super().setup()
 
     def _calc_canth(self, year: float, scenario: str) -> np.ndarray:

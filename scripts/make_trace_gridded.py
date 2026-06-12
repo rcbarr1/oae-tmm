@@ -25,8 +25,8 @@ latitude  = ocim['latitude']
 longitude = ocim['longitude']
 depth     = ocim['depth']
 
-temperature_3d = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/temperature.npy')
-salinity_3d    = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/salinity.npy')
+temperature_3d = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/temperature.nc')
+salinity_3d    = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/salinity.nc')
 
 scenarios = {
     'none': 1, 'ssp119': 2, 'ssp126': 3, 'ssp245': 4, 'ssp370': 5,

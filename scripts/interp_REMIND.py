@@ -21,7 +21,7 @@ from scipy.interpolate import PchipInterpolator
 co2_trajs = np.genfromtxt(
     './pyTRACE/pyTRACE/data/CO2Trajectories_OLD.txt',
     delimiter='\t', dtype=None, skip_header=0,
-    missing_values=None, filling_values=np.nan, encoding=None,
+    missing_values=None, filling_values=np.nan,
 )
 co2_trajs = np.vstack(co2_trajs.tolist())
 
@@ -51,7 +51,7 @@ remind_co2_interp_adj[65:] = remind_co2_interp[65:] - 0.144 * (remind_co2_interp
 co2_trajs_adj = np.genfromtxt(
     './pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted_OLD.txt',
     delimiter='\t', dtype=None, skip_header=0,
-    missing_values=None, filling_values=np.nan, encoding=None,
+    missing_values=None, filling_values=np.nan,
 )
 co2_trajs_adj = np.vstack(co2_trajs_adj.tolist())
 co2_trajs_adj = np.hstack((co2_trajs_adj, np.expand_dims(remind_co2_interp_adj, axis=1)))

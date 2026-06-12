@@ -2,13 +2,12 @@
 One-time data preprocessing functions for oae-tmm.
 
 These functions convert raw observational data products to the OCIM2-48L grid
-and save the results as .npy files. They are called once from
+and save the results as .nc files. They are called once from
 scripts/generate_input_data.py, not during experiment runs. The functions
 serve as documentation of exactly how each input dataset was processed.
 
 Data sources:
   - GLODAPv2.2016b: https://glodap.info/index.php/mapped-data-product/
-  - WOA18: https://www.ncei.noaa.gov/access/world-ocean-atlas-2018/
   - NCEP/DOE Reanalysis II: https://psl.noaa.gov/data/gridded/data.ncep.reanalysis2.html
   - NOAA ERSSTv5: https://psl.noaa.gov/data/gridded/data.noaa.ersst.v5.html
   - COBALT: GFDL ocean biogeochemistry model output
@@ -24,7 +23,7 @@ from oae_tmm.grid import inpaint_nans_3d, inpaint_nans_2d
 def regrid_glodap(data_path: str, glodap_var: str, latitude: np.ndarray,
                   longitude: np.ndarray, depth: np.ndarray,
                   ocnmask: np.ndarray) -> None:
-    """Regrid a GLODAPv2.2016b mapped variable to the OCIM grid and save as .npy.
+    """Regrid a GLODAPv2.2016b mapped variable to the OCIM grid and save as .nc.
 
     Interpolates from the GLODAP lat/lon/depth grid to the OCIM2-48L grid
     using linear interpolation, then fills remaining NaNs with iterative
@@ -84,100 +83,26 @@ def regrid_glodap(data_path: str, glodap_var: str, latitude: np.ndarray,
     if glodap_var in ('PO4', 'silicate'):
         var[var < 0] = 0
 
-    # save with consistent naming (GLODAP uses 'TCO2' and 'TAlk'; we store as 'CT' and 'AT')
-    if glodap_var == 'TCO2':
-        np.save(data_path + 'GLODAPv2.2016b.MappedProduct/CT.npy', var)
-    elif glodap_var == 'TAlk':
-        np.save(data_path + 'GLODAPv2.2016b.MappedProduct/AT.npy', var)
-    else:
-        np.save(data_path + 'GLODAPv2.2016b.MappedProduct/' + glodap_var + '.npy', var)
+    # save with consistent naming (GLODAP uses 'TCO2', 'TAlk', 'PO4'; we store as 'CT', 'AT', 'phosphate')
+    _name_map  = {'TCO2': 'CT', 'TAlk': 'AT', 'PO4': 'phosphate'}
+    _units_map = {'TCO2': 'umol kg-1', 'TAlk': 'umol kg-1', 'temperature': 'degrees C',
+                  'salinity': 'unitless', 'silicate': 'umol kg-1', 'PO4': 'umol kg-1'}
+    nc_name = _name_map.get(glodap_var, glodap_var)
+    xr.DataArray(
+        var,
+        dims=['latitude', 'longitude', 'depth'],
+        coords={'latitude': latitude, 'longitude': longitude, 'depth': depth},
+        attrs={'units': _units_map.get(glodap_var, ''), 'source': 'GLODAPv2.2016b'},
+        name=nc_name,
+    ).to_netcdf(data_path + 'GLODAPv2.2016b.MappedProduct/' + nc_name + '.nc')
 
     print('\tregrid complete in ' + str(round(time.time() - start_time, 3)) + ' s')
 
-
-def regrid_woa(data_path: str, woa_var: str, latitude: np.ndarray,
-               longitude: np.ndarray, depth: np.ndarray,
-               ocnmask: np.ndarray) -> None:
-    """Regrid a World Ocean Atlas 2018 variable to the OCIM grid and save as .npy.
-
-    Interpolates from the WOA18 lat/lon/depth grid to the OCIM2-48L grid,
-    then fills NaNs with iterative neighbor averaging. WOA18 longitudes are
-    in -180 to 180; they are converted to 0-360 before interpolating.
-
-    Parameters
-    ----------
-    data_path : str
-        Path to the data directory WOA18/
-    woa_var : str
-        Variable to regrid. One of: 'S' (salinity), 'T' (temperature),
-        'Si' (silicate), 'P' (phosphate).
-    latitude : np.ndarray
-        1D array of OCIM2-48L latitude values [degrees N].
-    longitude : np.ndarray
-        1D array of OCIM2-48L longitude values [degrees E, 0-360].
-    depth : np.ndarray
-        1D array of OCIM2-48L depth values [m].
-    ocnmask : np.ndarray
-        Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
-    """
-    if woa_var == 'S':
-        data = xr.open_dataset(data_path + 'WOA18/woa18_decav81B0_s00_01.nc', decode_times=False)
-    elif woa_var == 'T':
-        data = xr.open_dataset(data_path + 'WOA18/woa18_decav81B0_t00_01.nc', decode_times=False)
-    elif woa_var == 'Si':
-        data = xr.open_dataset(data_path + 'WOA18/woa18_all_i00_01.nc', decode_times=False)
-    elif woa_var == 'P':
-        data = xr.open_dataset(data_path + 'WOA18/woa18_all_p00_01.nc', decode_times=False)
-    else:
-        print("WOA data not found. Choose from woa_var = 'S', 'T', 'Si', 'P'")
-        return
-
-    print('begin regrid of ' + woa_var)
-    start_time = time.time()
-
-    # convert WOA18 longitudes from -180-180 to 0-360 to match OCIM
-    data['lon'] = (data['lon'] + 360) % 360
-    data = data.sortby('lon')
-
-    data_lat   = data['lat'].to_numpy()
-    data_lon   = data['lon'].to_numpy()
-    data_depth = data['depth'].to_numpy()
-
-    # transpose to (lat, lon, depth) to match OCIM dimension order
-    if woa_var == 'S':
-        var = data.s_an.isel(time=0).transpose('lat', 'lon', 'depth').values
-    elif woa_var == 'T':
-        var = data.t_an.isel(time=0).transpose('lat', 'lon', 'depth').values
-    elif woa_var == 'Si':
-        var = data.i_an.isel(time=0).transpose('lat', 'lon', 'depth').values
-    elif woa_var == 'P':
-        var = data.p_an.isel(time=0).transpose('lat', 'lon', 'depth').values
-
-    interp = RegularGridInterpolator(
-        (data_lat, data_lon, data_depth), var, bounds_error=False, fill_value=None  # type: ignore[arg-type]
-    )
-
-    lat_grid, lon_grid, depth_grid = np.meshgrid(latitude, longitude, depth, indexing='ij')
-    query_points = np.array([lat_grid.ravel(), lon_grid.ravel(), depth_grid.ravel()]).T
-    var = interp(query_points).reshape(depth_grid.shape)
-
-    var = inpaint_nans_3d(var, mask=ocnmask)
-
-    if woa_var == 'S':
-        np.save(data_path + 'WOA18/S.npy', var)
-    elif woa_var == 'T':
-        np.save(data_path + 'WOA18/T.npy', var)
-    elif woa_var == 'Si':
-        np.save(data_path + 'WOA18/Si.npy', var)
-    elif woa_var == 'P':
-        np.save(data_path + 'WOA18/P.npy', var)
-
-    print('\tregrid complete in ' + str(round(time.time() - start_time, 3)) + ' s')
 
 
 def regrid_ncep_noaa(data_path: str, ncep_var: str, latitude: np.ndarray,
                      longitude: np.ndarray, ocnmask: np.ndarray) -> None:
-    """Regrid a NCEP/DOE or NOAA SST surface field to the OCIM grid and save as .npy.
+    """Regrid a NCEP/DOE or NOAA SST surface field to the OCIM grid and save as .nc.
 
     Computes the annual mean from the monthly climatology, interpolates to the
     OCIM2-48L surface grid, and fills NaNs. Wind speed is averaged over
@@ -199,14 +124,14 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, latitude: np.ndarray,
         Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
     """
     if ncep_var == 'icec':
-        data = xr.open_dataset(data_path + 'NCEP_DOE_Reanalysis_II/icec.sfc.mon.ltm.1991-2020.nc')
+        data = xr.open_dataset(data_path + 'NCEP_DOE_Reanalysis_II/icec.sfc.mon.ltm.1991-2020.nc', use_cftime=True)
         var = data.icec.mean(dim='time', skipna=True).values
     elif ncep_var == 'wspd':
         data = xr.open_dataset(data_path + 'NCEP_DOE_Reanalysis_II/wspd.10m.mon.mean.nc')
         # time indices 552-924 correspond to 1994-01-01 through 2024-01-01
         var = data.wspd.isel(time=slice(552, 924)).mean(dim='time', skipna=True).values
     elif ncep_var == 'sst':
-        data = xr.open_dataset(data_path + 'NOAA_Extended_Reconstruction_SST_V5/sst.mon.ltm.1991-2020.nc')
+        data = xr.open_dataset(data_path + 'NOAA_Extended_Reconstruction_SST_V5/sst.mon.ltm.1991-2020.nc', use_cftime=True)
         var = data.sst.mean(dim='time', skipna=True).values
     else:
         print('NCEP/NOAA data not found.')
@@ -228,12 +153,18 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, latitude: np.ndarray,
 
     var = inpaint_nans_2d(var, mask=ocnmask[:, :, 0])
 
-    if ncep_var == 'icec':
-        np.save(data_path + 'NCEP_DOE_Reanalysis_II/icec.npy', var)
-    elif ncep_var == 'wspd':
-        np.save(data_path + 'NCEP_DOE_Reanalysis_II/wspd.npy', var)
-    elif ncep_var == 'sst':
-        np.save(data_path + 'NOAA_Extended_Reconstruction_SST_V5/sst.npy', var)
+    _units_map  = {'icec': 'unitless', 'wspd': 'm s-1', 'sst': 'degrees C'}
+    _source_map = {'icec': 'NCEP/DOE Reanalysis II', 'wspd': 'NCEP/DOE Reanalysis II',
+                   'sst': 'NOAA ERSSTv5'}
+    _path_map   = {'icec': 'NCEP_DOE_Reanalysis_II/', 'wspd': 'NCEP_DOE_Reanalysis_II/',
+                   'sst': 'NOAA_Extended_Reconstruction_SST_V5/'}
+    xr.DataArray(
+        var,
+        dims=['latitude', 'longitude'],
+        coords={'latitude': latitude, 'longitude': longitude},
+        attrs={'units': _units_map[ncep_var], 'source': _source_map[ncep_var]},
+        name=ncep_var,
+    ).to_netcdf(data_path + _path_map[ncep_var] + ncep_var + '.nc')
 
     print('\tregrid complete in ' + str(round(time.time() - start_time, 3)) + ' s')
 
@@ -241,7 +172,7 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, latitude: np.ndarray,
 def regrid_cobalt(cobalt_vrbl: xr.DataArray, latitude: np.ndarray, longitude: np.ndarray,
                   depth: np.ndarray, ocnmask: np.ndarray,
                   data_path: str) -> None:
-    """Regrid a COBALT biogeochemistry variable to the OCIM grid and save as .npy.
+    """Regrid a COBALT biogeochemistry variable to the OCIM grid and save as .nc.
 
     Averages across the COBALT time dimension, converts longitudes from the
     COBALT convention (-300 to +60) to 0-360, interpolates to the OCIM2-48L
@@ -293,5 +224,11 @@ def regrid_cobalt(cobalt_vrbl: xr.DataArray, latitude: np.ndarray, longitude: np
 
     var_inpainted = inpaint_nans_3d(var_interped, mask=ocnmask)
 
-    np.save(data_path + 'COBALT_regridded/' + var_name + '.npy', var_inpainted)
+    xr.DataArray(
+        var_inpainted,
+        dims=['latitude', 'longitude', 'depth'],
+        coords={'latitude': latitude, 'longitude': longitude, 'depth': depth},
+        attrs={'source': 'GFDL COBALT'},
+        name=var_name,
+    ).to_netcdf(data_path + 'COBALT_regridded/' + var_name + '.nc')
     print('\tregrid complete in ' + str(round(time.time() - start_time, 3)) + ' s')

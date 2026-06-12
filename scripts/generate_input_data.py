@@ -1,7 +1,7 @@
 """
 Regrid observational data products to the OCIM2-48L grid.
 
-Run once to produce the .npy files in data/GLODAPv2.2016b.MappedProduct/
+Run once to produce the .nc files in data/GLODAPv2.2016b.MappedProduct/
 and the NCEP/NOAA reanalysis arrays used by experiments at runtime.
 """
 

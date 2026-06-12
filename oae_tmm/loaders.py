@@ -3,7 +3,7 @@ Experiment-time data loading functions for oae-tmm.
 
 These functions load pre-processed data from disk at the start of each
 experiment run. They expect that scripts/generate_input_data.py (which calls
-oae_tmm.regrid) has already been run to produce the .npy files on disk.
+oae_tmm.regrid) has already been run to produce the .nc files on disk.
 
 All functions return plain dicts of numpy arrays so that experiments can
 unpack only the fields they need.
@@ -139,7 +139,7 @@ def load_ocim(data_path: str) -> dict:
 def load_glodap(data_path: str, ocnmask: np.ndarray) -> dict:
     """Load pre-regridded GLODAPv2 fields from disk.
 
-    Reads the .npy files produced by regrid.regrid_glodap() and flattens each
+    Reads the .nc files produced by regrid.regrid_glodap() and flattens each
     field to a 1D ocean-only vector using the OCIM2-48L ocean mask.
 
     Parameters
@@ -161,19 +161,19 @@ def load_glodap(data_path: str, ocnmask: np.ndarray) -> dict:
     """
     base = data_path + 'GLODAPv2.2016b.MappedProduct/'
     return {
-        'temperature': flatten(np.load(base + 'temperature.npy'), ocnmask),
-        'salinity':    flatten(np.load(base + 'salinity.npy'),    ocnmask),
-        'CT':          flatten(np.load(base + 'CT.npy'),          ocnmask),
-        'AT':          flatten(np.load(base + 'AT.npy'),          ocnmask),
-        'silicate':    flatten(np.load(base + 'silicate.npy'),    ocnmask),
-        'phosphate':   flatten(np.load(base + 'phosphate.npy'),    ocnmask),
+        'temperature': flatten(xr.open_dataset(base + 'temperature.nc')['temperature'].values, ocnmask),
+        'salinity':    flatten(xr.open_dataset(base + 'salinity.nc')['salinity'].values,        ocnmask),
+        'CT':          flatten(xr.open_dataset(base + 'CT.nc')['CT'].values,                   ocnmask),
+        'AT':          flatten(xr.open_dataset(base + 'AT.nc')['AT'].values,                   ocnmask),
+        'silicate':    flatten(xr.open_dataset(base + 'silicate.nc')['silicate'].values,        ocnmask),
+        'phosphate':   flatten(xr.open_dataset(base + 'phosphate.nc')['phosphate'].values,      ocnmask),
     }
 
 
 def load_ncep_noaa(data_path: str, ocnmask: np.ndarray) -> dict:
     """Load pre-regridded NCEP/DOE and NOAA surface fields from disk.
 
-    Reads the .npy files produced by regrid.regrid_ncep_noaa(). Each 2D
+    Reads the .nc files produced by regrid.regrid_ncep_noaa(). Each 2D
     surface field (n_lat, n_lon) is placed into the surface layer of a 3D
     array (zero at all other depths) and flattened to a 1D ocean-only vector.
     Subsurface values are 0, not NaN, so the vectors can be used directly in
@@ -200,7 +200,7 @@ def load_ncep_noaa(data_path: str, ocnmask: np.ndarray) -> dict:
         return flatten(field_3d, ocnmask)
 
     return {
-        'f_ice': _surf_to_flat(np.load(data_path + 'NCEP_DOE_Reanalysis_II/icec.npy')),
-        'wspd':  _surf_to_flat(np.load(data_path + 'NCEP_DOE_Reanalysis_II/wspd.npy')),
-        'sst':   _surf_to_flat(np.load(data_path + 'NOAA_Extended_Reconstruction_SST_V5/sst.npy')),
+        'f_ice': _surf_to_flat(xr.open_dataset(data_path + 'NCEP_DOE_Reanalysis_II/icec.nc')['icec'].values),
+        'wspd':  _surf_to_flat(xr.open_dataset(data_path + 'NCEP_DOE_Reanalysis_II/wspd.nc')['wspd'].values),
+        'sst':   _surf_to_flat(xr.open_dataset(data_path + 'NOAA_Extended_Reconstruction_SST_V5/sst.nc')['sst'].values),
     }

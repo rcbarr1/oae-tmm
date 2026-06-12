@@ -84,12 +84,13 @@ mpl.rcParams['font.weight'] = 'bold'
 #%% pull in preindustrial baselines
 
 # get GLODAP data
-CT_3d          = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/CT.npy')          # dissolved inorganic carbon [µmol kg-1]
-AT_3d          = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/AT.npy')          # total alkalinity [µmol kg-1]
-temperature_3d = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/temperature.npy') # temperature [ºC]
-salinity_3d    = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/salinity.npy')    # salinity [unitless]
-silicate_3d    = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/silicate.npy')    # silicate [µmol kg-1]
-phosphate_3d   = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/phosphate.npy')   # phosphate [µmol kg-1]
+_glodap = data_path + 'GLODAPv2.2016b.MappedProduct/'
+CT_3d          = xr.open_dataset(_glodap + 'CT.nc')['CT'].values                    # dissolved inorganic carbon [µmol kg-1]
+AT_3d          = xr.open_dataset(_glodap + 'AT.nc')['AT'].values                    # total alkalinity [µmol kg-1]
+temperature_3d = xr.open_dataset(_glodap + 'temperature.nc')['temperature'].values  # temperature [ºC]
+salinity_3d    = xr.open_dataset(_glodap + 'salinity.nc')['salinity'].values        # salinity [unitless]
+silicate_3d    = xr.open_dataset(_glodap + 'silicate.nc')['silicate'].values        # silicate [µmol kg-1]
+phosphate_3d   = xr.open_dataset(_glodap + 'phosphate.nc')['phosphate'].values      # phosphate [µmol kg-1]
 
 salinity    = flatten(salinity_3d,    ocnmask)
 temperature = flatten(temperature_3d, ocnmask)
