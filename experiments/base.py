@@ -233,6 +233,7 @@ class BaseExperiment(ABC):
             total_silicate=self.silicate, total_phosphate=self.phosphate,
         )
         pCO2        = co2sys['pCO2']           # [µatm]
+        fCO2        = co2sys['fCO2']           # [µatm]
         aqueous_CO2 = co2sys['CO2']            # [µmol kg^-1]
         R_C         = co2sys['revelle_factor']
         del co2sys
@@ -250,7 +251,7 @@ class BaseExperiment(ABC):
 
         # Solubility constant [(µmol CO2) m^-3 (µatm CO2)^-1]
         # Based on Weiss (1974) https://doi.org/10.1016/0304-4203(74)90015-2
-        K0 = aqueous_CO2 / pCO2 * self.grid['rho']
+        K0 = aqueous_CO2 / fCO2 * self.grid['rho']
 
         gc.collect()
         jax.clear_caches()
