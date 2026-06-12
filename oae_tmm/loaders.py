@@ -165,14 +165,11 @@ def load_glodap(data_path: str, ocnmask: np.ndarray) -> dict:
         phosphate   : np.ndarray (m,), phosphate [µmol kg^-1]
     """
     base = data_path + 'GLODAPv2.2016b.MappedProduct/'
-    return {
-        'temperature': flatten(xr.open_dataset(base + 'temperature.nc')['temperature'].values, ocnmask),
-        'salinity':    flatten(xr.open_dataset(base + 'salinity.nc')['salinity'].values,        ocnmask),
-        'CT':          flatten(xr.open_dataset(base + 'CT.nc')['CT'].values,                   ocnmask),
-        'AT':          flatten(xr.open_dataset(base + 'AT.nc')['AT'].values,                   ocnmask),
-        'silicate':    flatten(xr.open_dataset(base + 'silicate.nc')['silicate'].values,        ocnmask),
-        'phosphate':   flatten(xr.open_dataset(base + 'phosphate.nc')['phosphate'].values,      ocnmask),
-    }
+    result = {}
+    for var in ('temperature', 'salinity', 'CT', 'AT', 'silicate', 'phosphate'):
+        with xr.open_dataset(base + f'{var}.nc') as ds:
+            result[var] = flatten(ds[var].transpose('latitude', 'longitude', 'depth').values, ocnmask)
+    return result
 
 
 def load_ncep_noaa(data_path: str, ocnmask: np.ndarray) -> dict:
@@ -205,7 +202,7 @@ def load_ncep_noaa(data_path: str, ocnmask: np.ndarray) -> dict:
         return flatten(field_3d, ocnmask)
 
     return {
-        'f_ice': _surf_to_flat(xr.open_dataset(data_path + 'NCEP_DOE_Reanalysis_II/icec.nc')['icec'].values),
-        'wspd':  _surf_to_flat(xr.open_dataset(data_path + 'NCEP_DOE_Reanalysis_II/wspd.nc')['wspd'].values),
-        'sst':   _surf_to_flat(xr.open_dataset(data_path + 'NOAA_Extended_Reconstruction_SST_V5/sst.nc')['sst'].values),
+        'f_ice': _surf_to_flat(xr.open_dataset(data_path + 'NCEP_DOE_Reanalysis_II/icec.nc')['icec'].transpose('latitude', 'longitude').values),
+        'wspd':  _surf_to_flat(xr.open_dataset(data_path + 'NCEP_DOE_Reanalysis_II/wspd.nc')['wspd'].transpose('latitude', 'longitude').values),
+        'sst':   _surf_to_flat(xr.open_dataset(data_path + 'NOAA_Extended_Reconstruction_SST_V5/sst.nc')['sst'].transpose('latitude', 'longitude').values),
     }

@@ -67,17 +67,15 @@ def regrid_glodap(data_path: str, glodap_var: str, latitude: np.ndarray,
         (glodap_lat, glodap_lon, glodap_depth), var, bounds_error=False, fill_value=None  # type: ignore[arg-type]
     )
 
-    # GLODAP longitudes run from 20E to 380E; shift model lons to match
-    longitude[longitude < 20] += 360
+    # GLODAP longitudes run from 20E to 380E; shift a local copy of model lons to match
+    lon_shifted = longitude.copy()
+    lon_shifted[lon_shifted < 20] += 360
 
-    lat_grid, lon_grid, depth_grid = np.meshgrid(latitude, longitude, depth, indexing='ij')
+    lat_grid, lon_grid, depth_grid = np.meshgrid(latitude, lon_shifted, depth, indexing='ij')
     query_points = np.array([lat_grid.ravel(), lon_grid.ravel(), depth_grid.ravel()]).T
     var = interp(query_points).reshape(depth_grid.shape)
 
     var = inpaint_nans_3d(var, mask=ocnmask)
-
-    # restore model longitudes
-    longitude[longitude > 360] -= 360
 
     # silicate and phosphate can go slightly negative due to interpolation near zero, set to zero if needed
     if glodap_var in ('PO4', 'silicate'):
@@ -124,14 +122,16 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, latitude: np.ndarray,
         Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
     """
     if ncep_var == 'icec':
-        data = xr.open_dataset(data_path + 'NCEP_DOE_Reanalysis_II/icec.sfc.mon.ltm.1991-2020.nc', use_cftime=True)
+        data = xr.open_dataset(data_path + 'NCEP_DOE_Reanalysis_II/icec.sfc.mon.ltm.1991-2020.nc',
+                               decode_times=xr.coders.CFDatetimeCoder(use_cftime=True))
         var = data.icec.mean(dim='time', skipna=True).values
     elif ncep_var == 'wspd':
         data = xr.open_dataset(data_path + 'NCEP_DOE_Reanalysis_II/wspd.10m.mon.mean.nc')
         # time indices 552-924 correspond to 1994-01-01 through 2024-01-01
         var = data.wspd.isel(time=slice(552, 924)).mean(dim='time', skipna=True).values
     elif ncep_var == 'sst':
-        data = xr.open_dataset(data_path + 'NOAA_Extended_Reconstruction_SST_V5/sst.mon.ltm.1991-2020.nc', use_cftime=True)
+        data = xr.open_dataset(data_path + 'NOAA_Extended_Reconstruction_SST_V5/sst.mon.ltm.1991-2020.nc',
+                               decode_times=xr.coders.CFDatetimeCoder(use_cftime=True))
         var = data.sst.mean(dim='time', skipna=True).values
     else:
         print('NCEP/NOAA data not found.')
@@ -169,66 +169,3 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, latitude: np.ndarray,
     print('\tregrid complete in ' + str(round(time.time() - start_time, 3)) + ' s')
 
 
-def regrid_cobalt(cobalt_vrbl: xr.DataArray, latitude: np.ndarray, longitude: np.ndarray,
-                  depth: np.ndarray, ocnmask: np.ndarray,
-                  data_path: str) -> None:
-    """Regrid a COBALT biogeochemistry variable to the OCIM grid and save as .nc.
-
-    Averages across the COBALT time dimension, converts longitudes from the
-    COBALT convention (-300 to +60) to 0-360, interpolates to the OCIM2-48L
-    grid, and fills NaNs.
-
-    Parameters
-    ----------
-    cobalt_vrbl : xarray.DataArray
-        COBALT model variable with dimensions (time, zl, yh, xh).
-    latitude : np.ndarray
-        1D array of OCIM2-48L latitude values [degrees N].
-    longitude : np.ndarray
-        1D array of OCIM2-48L longitude values [degrees E, 0-360].
-    depth : np.ndarray
-        1D array of OCIM2-48L depth values [m].
-    ocnmask : np.ndarray
-        Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
-    data_path : str
-        Path where COBALT_regridded/ output directory exists.
-    """
-    cobalt_var = cobalt_vrbl.copy()
-    var_name = cobalt_var.name
-    assert isinstance(var_name, str), f"cobalt_vrbl must have a string name, got {type(var_name)}"
-    print('begin regrid of ' + var_name)
-    start_time = time.time()
-    
-    cobalt_var = cobalt_var.where(cobalt_var != 1e20)  # replace fill value with NaN
-    cobalt_var = cobalt_var.mean(dim='time', skipna=True)
-    
-    # convert COBALT longitudes from -300-+60 to 0-360 to match OCIM
-    cobalt_var['xh'] = (cobalt_var['xh'] + 360) % 360
-    cobalt_var = cobalt_var.sortby('xh')
-
-    cobalt_lat   = cobalt_var['yh'].to_numpy()
-    cobalt_lon   = cobalt_var['xh'].to_numpy()
-    cobalt_depth = cobalt_var['zl'].to_numpy()
-
-    # transpose to (lat, lon, depth) to match OCIM dimension order
-    var = cobalt_var.transpose('yh', 'xh', 'zl').values
-    
-    interp = RegularGridInterpolator(
-        (cobalt_lat, cobalt_lon, cobalt_depth), var, method='linear',
-        bounds_error=False, fill_value=None  # type: ignore[arg-type]
-    )
-
-    lat_grid, lon_grid, depth_grid = np.meshgrid(latitude, longitude, depth, indexing='ij')
-    query_points = np.array([lat_grid.ravel(), lon_grid.ravel(), depth_grid.ravel()]).T
-    var_interped = interp(query_points).reshape(depth_grid.shape)
-
-    var_inpainted = inpaint_nans_3d(var_interped, mask=ocnmask)
-
-    xr.DataArray(
-        var_inpainted,
-        dims=['latitude', 'longitude', 'depth'],
-        coords={'latitude': latitude, 'longitude': longitude, 'depth': depth},
-        attrs={'source': 'GFDL COBALT'},
-        name=var_name,
-    ).to_netcdf(data_path + 'COBALT_regridded/' + var_name + '.nc')
-    print('\tregrid complete in ' + str(round(time.time() - start_time, 3)) + ' s')

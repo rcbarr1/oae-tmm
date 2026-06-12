@@ -10,7 +10,6 @@ CLI usage:
     python -m experiments.exp22 --list
     python -m experiments.exp22 --test
 """
-#%%
 import gc
 from datetime import datetime
 

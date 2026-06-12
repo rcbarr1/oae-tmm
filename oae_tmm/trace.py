@@ -27,6 +27,7 @@ pyTRACE/TRACE scenario 1, which is a linear extrapolation of the historical
 trend from 2012–2022.
 """
 
+import functools
 import warnings
 
 import numpy as np
@@ -35,6 +36,11 @@ from scipy.interpolate import RegularGridInterpolator
 from pyTRACE import trace
 
 from oae_tmm.grid import inpaint_nans_3d, make_3d
+
+
+@functools.lru_cache(maxsize=None)
+def _load_trace_dataset(filepath: str) -> xr.Dataset:
+    return xr.open_dataset(filepath, decode_times=False)
 
 
 def interp_trace(data_path, time, scenario, latitude, longitude, depth, ocnmask):
@@ -97,7 +103,7 @@ def interp_trace(data_path, time, scenario, latitude, longitude, depth, ocnmask)
     #              compared to the published product.
     #
     #   >2100      CanthFromTRACECO2Pathway{N}.nc
-    #              Original published TRACE gridded product (Fay et al.),
+    #              Original published TRACE gridded product (Carter et al.),
     #              sparse time axis (decadal to centennial), used as fallback
     #              for extended projections.
     #              Archived at https://zenodo.org/records/15692788.
@@ -110,25 +116,16 @@ def interp_trace(data_path, time, scenario, latitude, longitude, depth, ocnmask)
         if scenario == 'none' and time > 2022:
             warnings.warn("'none' scenario chosen, but time > 2022 selected. "
                           "Canth is based on a linear extrapolation from 2012-2022.")
-        trace_data = xr.open_dataset(
-            data_path + 'TRACE_gridded/OCIM_CanthFromTRACECO2Pathway' + str(scenarios[scenario]) + '.nc',
-            decode_times=False,
-        )
+        filepath = data_path + 'TRACE_gridded/OCIM_CanthFromTRACECO2Pathway' + str(scenarios[scenario]) + '.nc'
     elif time > 2100:
         if scenario == 'none':
             warnings.warn("'none' scenario chosen, but time > 2020 selected. "
                           "Canth is based on a linear extrapolation from 2012-2022.")
-        trace_data = xr.open_dataset(
-            data_path + 'TRACE_gridded/CanthFromTRACECO2Pathway' + str(scenarios[scenario]) + '.nc',
-            decode_times=False,
-        )
+        filepath = data_path + 'TRACE_gridded/CanthFromTRACECO2Pathway' + str(scenarios[scenario]) + '.nc'
     else:
-        trace_data = xr.open_dataset(
-            data_path + 'TRACE_gridded/CanthFromTRACECO2Pathway1.nc',
-            decode_times=False,
-        )
+        filepath = data_path + 'TRACE_gridded/CanthFromTRACECO2Pathway1.nc'
 
-    trace_data = trace_data.interp(time=time)
+    trace_data = _load_trace_dataset(filepath).interp(time=time)
 
     trace_lat = trace_data['lat'].to_numpy()     # ºN
     trace_lon = trace_data['lon'].to_numpy()     # ºE
@@ -140,17 +137,15 @@ def interp_trace(data_path, time, scenario, latitude, longitude, depth, ocnmask)
         (trace_lat, trace_lon, trace_depth), canth, bounds_error=False, fill_value=None,  # type: ignore[arg-type]
     )
 
-    # TRACE longitude runs 20°E–380°E; temporarily shift OCIM longitudes < 20°E to match
-    longitude[longitude < 20] += 360
+    # TRACE longitude runs 20°E–380°E; shift a local copy of OCIM longitudes < 20°E to match
+    lon_shifted = longitude.copy()
+    lon_shifted[lon_shifted < 20] += 360
 
-    lat_grid, lon_grid, depth_grid = np.meshgrid(latitude, longitude, depth, indexing='ij')
+    lat_grid, lon_grid, depth_grid = np.meshgrid(latitude, lon_shifted, depth, indexing='ij')
     query_points = np.column_stack([lat_grid.ravel(), lon_grid.ravel(), depth_grid.ravel()])
 
     canth = interp(query_points).reshape(lat_grid.shape)
     canth = inpaint_nans_3d(canth, mask=ocnmask)
-
-    # shift longitudes back
-    longitude[longitude > 360] -= 360
 
     return canth
 

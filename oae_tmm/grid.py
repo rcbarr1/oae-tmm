@@ -160,7 +160,7 @@ def inpaint_nans_3d(array_3d: np.ndarray, iterations: int = 10,
         land_mask = np.zeros_like(array_3d, dtype=bool)
 
     for _ in range(iterations):
-        # cound valid neighbors
+        # count valid neighbors
         valid = ~np.isnan(interpolated)
         neighbor_sum = convolve(np.nan_to_num(interpolated), kernel, mode='wrap')
         neighbor_count = convolve(valid.astype(float), kernel, mode='wrap')
@@ -201,53 +201,7 @@ def inpaint_nans_2d(array_2d: np.ndarray, iterations: int = 10,
     np.ndarray
         2D array with NaN values filled at ocean cells.
     """
-    if iterations == 0:
-        warnings.warn(
-            'inpaint_nans_2d called with iterations=0: NaN cells will be replaced by the '
-            'global array mean but no neighbour averaging will occur.',
-            UserWarning, stacklevel=2,
-        )
-    if np.all(np.isnan(array_2d)):
-        warnings.warn(
-            'inpaint_nans_2d received an all-NaN array: no valid data exists to propagate, '
-            'returning all-NaN.',
-            UserWarning, stacklevel=2,
-        )
-
-    interpolated = array_2d.copy()
-
-    # 4-connected stencil: up, down, left, right — no diagonals
-    kernel = np.zeros((3, 3))
-    kernel[0, 1] = 1  # up
-    kernel[2, 1] = 1  # down
-    kernel[1, 0] = 1  # left
-    kernel[1, 2] = 1  # right
-
-    nan_mask = np.isnan(interpolated)
-    interpolated[nan_mask] = np.nanmean(interpolated)  # initialize NaNs to global mean
-
-    # optional land mask to persist NaNs in land areas
-    if mask is not None:
-        land_mask = ~(mask > 0)  # True where land (accepts 0/1 integer or bool)
-    else:
-        land_mask = np.zeros_like(array_2d, dtype=bool)
-
-    for _ in range(iterations):
-        # count valid neighbors
-        valid = ~np.isnan(interpolated)
-        neighbor_sum = convolve(np.nan_to_num(interpolated), kernel, mode='wrap')
-        neighbor_count = convolve(valid.astype(float), kernel, mode='wrap')
-
-        # avoid division by 0
-        with np.errstate(invalid='ignore', divide='ignore'):
-            new_vals = neighbor_sum / neighbor_count
-
-        # only update cells that were originally NaN, are ocean, and have at least one valid neighbor
-        update_mask = nan_mask & ~land_mask & (neighbor_count > 0)
-        interpolated[update_mask] = new_vals[update_mask]
-
-    if mask is not None:
-        interpolated[land_mask] = np.nan  # restore land to NaN
-
-    return interpolated
+    mask_3d = mask[:, :, np.newaxis] if mask is not None else None
+    result = inpaint_nans_3d(array_2d[:, :, np.newaxis], iterations=iterations, mask=mask_3d)
+    return result[:, :, 0]
 

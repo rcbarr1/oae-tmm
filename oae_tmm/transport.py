@@ -165,7 +165,7 @@ def build_A_matrix(
 
     # --- row 2: ∆AT equation (pure transport, no air-sea exchange) ---
     A2_ = sparse.hstack([
-        sparse.csr_matrix(np.zeros((m, 1))), 0 * TR, TR
+        sparse.csr_matrix((m, 1)), sparse.csr_matrix(TR.shape), TR
     ])
 
     return sparse.vstack([  # type: ignore[return-value]
