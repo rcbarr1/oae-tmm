@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 from scipy import sparse
 
-from netCDF4 import Dataset
+from netCDF4 import Dataset  # type: ignore[import-untyped]
 
 from oae_tmm.grid import flatten, make_3d, get_depth_idx, inpaint_nans_2d, inpaint_nans_3d
 from oae_tmm.chemistry import schmidt_number, calc_piston_velocity
@@ -565,7 +565,7 @@ def test_output_path():
             scenario='ssp245', start_year=2020.0,
             times=np.array([0., 1.]), max_steps_per_file=max_steps,
         )
-        return BaseExperiment(cfg)
+        return BaseExperiment(cfg)  # type: ignore[abstract]
 
     # max_steps_per_file=0: always return the original path unchanged
     exp = _exp('./outputs/test.nc', max_steps=0)

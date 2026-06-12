@@ -238,7 +238,7 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, latitude: np.ndarray,
     print('\tregrid complete in ' + str(round(time.time() - start_time, 3)) + ' s')
 
 
-def regrid_cobalt(cobalt_vrbl, latitude: np.ndarray, longitude: np.ndarray,
+def regrid_cobalt(cobalt_vrbl: xr.DataArray, latitude: np.ndarray, longitude: np.ndarray,
                   depth: np.ndarray, ocnmask: np.ndarray,
                   data_path: str) -> None:
     """Regrid a COBALT biogeochemistry variable to the OCIM grid and save as .npy.
@@ -264,6 +264,7 @@ def regrid_cobalt(cobalt_vrbl, latitude: np.ndarray, longitude: np.ndarray,
     """
     cobalt_var = cobalt_vrbl.copy()
     var_name = cobalt_var.name
+    assert isinstance(var_name, str), f"cobalt_vrbl must have a string name, got {type(var_name)}"
     print('begin regrid of ' + var_name)
     start_time = time.time()
     

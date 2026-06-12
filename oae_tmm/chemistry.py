@@ -6,10 +6,16 @@ number, piston velocity). They do not load observational data from disk and do
 not call the PETSc solver.
 """
 
+from typing import overload
+
 import numpy as np
 
 
-def schmidt_number(gas: str, temperature: np.ndarray) -> np.ndarray:
+@overload
+def schmidt_number(gas: str, temperature: float) -> float: ...
+@overload
+def schmidt_number(gas: str, temperature: np.ndarray) -> np.ndarray: ...
+def schmidt_number(gas: str, temperature: float | np.ndarray) -> float | np.ndarray:
     """Calculate the Schmidt number for a gas in seawater (Wanninkhof 2014).
 
     Coefficients are valid for seawater temperatures from -2°C to 40°C.
