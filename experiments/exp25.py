@@ -1,14 +1,14 @@
 """
-Exp25: DIC-removal efficiency map replicating Yamamoto et al., 2024.
+Exp25: CT-removal efficiency map replicating Yamamoto et al., 2024.
 
 Replicates the relative efficiency map from:
 https://iopscience.iop.org/article/10.1088/1748-9326/ad7477/meta
 
-For each surface ocean grid cell: removes DIC at 1 μmol kg-1 yr-1 for the
+For each surface ocean grid cell: removes CT at 1 μmol kg-1 yr-1 for the
 first 30 days, then lets the system equilibrate for 100 years. Mixed
 time-stepping (daily for 90 days, monthly to year 5, annual to year 100).
 
-CDR assumption: DIC removal only (no AT change).
+CDR assumption: CT removal only (no AT change).
 
 CLI usage:
     python -m experiments.exp25 --exp-id 0
@@ -25,29 +25,29 @@ from oae_tmm.grid import flatten
 
 
 class Exp25(BaseExperiment):
-    """DIC-removal impulse response at a single surface cell.
+    """CT-removal impulse response at a single surface cell.
 
-    Removes DIC at 1 μmol kg-1 yr-1 from one masked surface cell for the
+    Removes CT at 1 μmol kg-1 yr-1 from one masked surface cell for the
     first 30 days of the simulation, then zero thereafter. No AT change.
     """
 
     def __init__(self, cfg):
         super().__init__(cfg)
-        self._q_DIC_mask = None
+        self._q_CT_mask = None
 
-    def _get_q_DIC_mask(self) -> np.ndarray:
-        if self._q_DIC_mask is None:
+    def _get_q_CT_mask(self) -> np.ndarray:
+        if self._q_CT_mask is None:
             ocnmask = self.grid['ocnmask']
             mask_3d = np.zeros(ocnmask.shape)
             mask_3d[self.cfg.attrs['cell_lat_idx'], self.cfg.attrs['cell_lon_idx'], 0] = 1
-            self._q_DIC_mask = flatten(mask_3d, ocnmask)
-        return self._q_DIC_mask
+            self._q_CT_mask = flatten(mask_3d, ocnmask)
+        return self._q_CT_mask
 
     def make_q(self, t_current: float, _chem: dict, dt: float) -> np.ndarray:
         q = np.zeros(1 + 2 * self.m)
         t_offset = t_current - self.cfg.start_year
         if t_offset < 30.5 / 360:
-            q[1:(self.m + 1)] = self._get_q_DIC_mask() * -1  # [µmol DIC kg-1 yr-1]
+            q[1:(self.m + 1)] = self._get_q_CT_mask() * -1  # [µmol CT kg-1 yr-1]
         return q
 
 
@@ -106,7 +106,7 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
 
 
 def main():
-    run_cli(build_experiments, 'Exp25: DIC-removal efficiency map (Yamamoto et al., 2024)')
+    run_cli(build_experiments, 'Exp25: CT-removal efficiency map (Yamamoto et al., 2024)')
 
 
 if __name__ == '__main__':

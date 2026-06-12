@@ -197,23 +197,23 @@ def broadcast_to_dataset(array, ds):
     Returns
     -------
     xarray.DataArray
-        DataArray with dims ['lat', 'lon', 'depth'] and coordinates from ds.
+        DataArray with dims ['latitude', 'longitude', 'depth'] and coordinates from ds.
     """
-    return xr.DataArray(array, dims=['lat', 'lon', 'depth'],
-                        coords={'lat': ds.lat, 'lon': ds.lon, 'depth': ds.depth})
+    return xr.DataArray(array, dims=['latitude', 'longitude', 'depth'],
+                        coords={'latitude': ds.latitude, 'longitude': ds.longitude, 'depth': ds.depth})
 
 
-def make_surf_animation(variable, colorbar_label, model_lat, model_lon, t, nt,
+def make_surf_animation(variable, colorbar_label, latitude, longitude, t, nt,
                         vmin, vmax, cmap, filename):
     """Animate a surface (depth=0) field over time and save to an mp4 file.
 
     Parameters
     ----------
     variable : xarray.DataArray
-        4D DataArray with dims (time, lat, lon, depth); depth=0 slice is plotted.
+        4D DataArray with dims (time, latitude, longitude, depth); depth=0 slice is plotted.
     colorbar_label : str
         Label for the colorbar.
-    model_lat, model_lon : np.ndarray
+    latitude, longitude : np.ndarray
         1D arrays of OCIM2-48L latitudes [°N] and longitudes [°E].
     t : np.ndarray
         1D array of time values (decimal years) for frame titles.
@@ -229,7 +229,7 @@ def make_surf_animation(variable, colorbar_label, model_lat, model_lon, t, nt,
     levels = np.linspace(vmin, vmax, 100)
     fig, ax = plt.subplots(figsize=(10, 7))
 
-    cntr = ax.contourf(model_lon, model_lat, variable.isel(time=0).values[:, :, 0],
+    cntr = ax.contourf(longitude, latitude, variable.isel(time=0).values[:, :, 0],
                        levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
     fig.colorbar(cntr, ax=ax, label=colorbar_label)
     ax.set_xlabel('Longitude (ºE)')
@@ -238,7 +238,7 @@ def make_surf_animation(variable, colorbar_label, model_lat, model_lon, t, nt,
 
     def update_frame(idx):
         ax.clear()
-        ax.contourf(model_lon, model_lat, variable.isel(time=idx).values[:, :, 0],
+        ax.contourf(longitude, latitude, variable.isel(time=idx).values[:, :, 0],
                     levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
         ax.set_xlabel('Longitude (ºE)')
         ax.set_ylabel('Latitude (ºN)')
@@ -249,19 +249,19 @@ def make_surf_animation(variable, colorbar_label, model_lat, model_lon, t, nt,
     ani.save(filename, writer=animation.FFMpegWriter(fps=10), dpi=200)
 
 
-def make_section_animation(variable, colorbar_label, model_depth, model_lat, t, nt,
+def make_section_animation(variable, colorbar_label, depth, latitude, t, nt,
                            vmin, vmax, cmap, filename):
     """Animate a latitude–depth section at lon index 90 (≈181°E) over time and save to mp4.
 
     Parameters
     ----------
     variable : xarray.DataArray
-        4D DataArray with dims (time, lat, lon, depth).
+        4D DataArray with dims (time, latitude, longitude, depth).
     colorbar_label : str
         Label for the colorbar.
-    model_depth : np.ndarray
+    depth : np.ndarray
         1D array of OCIM2-48L depth levels [m].
-    model_lat : np.ndarray
+    latitude : np.ndarray
         1D array of OCIM2-48L latitudes [°N].
     t : np.ndarray
         1D array of time values (decimal years) for frame titles.
@@ -277,7 +277,7 @@ def make_section_animation(variable, colorbar_label, model_depth, model_lat, t, 
     levels = np.linspace(vmin, vmax, 100)
     fig, ax = plt.subplots(figsize=(10, 7))
 
-    cntr = ax.contourf(model_lat, model_depth, variable.isel(time=0).values[:, 90, :].T,
+    cntr = ax.contourf(latitude, depth, variable.isel(time=0).values[:, 90, :].T,
                        levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
     fig.colorbar(cntr, ax=ax, label=colorbar_label)
     ax.invert_yaxis()
@@ -287,7 +287,7 @@ def make_section_animation(variable, colorbar_label, model_depth, model_lat, t, 
 
     def update_frame(idx):
         ax.clear()
-        ax.contourf(model_lat, model_depth, variable.isel(time=idx).values[:, 90, :].T,
+        ax.contourf(latitude, depth, variable.isel(time=idx).values[:, 90, :].T,
                     levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
         ax.invert_yaxis()
         ax.set_xlabel('Latitude (ºN)')

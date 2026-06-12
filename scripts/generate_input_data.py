@@ -11,15 +11,15 @@ from oae_tmm.regrid import regrid_glodap, regrid_ncep_noaa
 data_path = './data/'
 
 ocim = load_ocim(data_path)
-ocnmask     = ocim['ocnmask']
-model_lat   = ocim['model_lat']
-model_lon   = ocim['model_lon']
-model_depth = ocim['model_depth']
+ocnmask   = ocim['ocnmask']
+latitude  = ocim['latitude']
+longitude = ocim['longitude']
+depth     = ocim['depth']
 
 # regrid GLODAPv2.2016b mapped fields
 for var in ['TCO2', 'TAlk', 'pHtsinsitutp', 'temperature', 'salinity', 'silicate', 'PO4']:
-    regrid_glodap(data_path, var, model_lat, model_lon, model_depth, ocnmask)
+    regrid_glodap(data_path, var, latitude, longitude, depth, ocnmask)
 
 # regrid NCEP/DOE reanalysis II surface fields
 for var in ['icec', 'wspd', 'sst']:
-    regrid_ncep_noaa(data_path, var, model_lat, model_lon, ocnmask)
+    regrid_ncep_noaa(data_path, var, latitude, longitude, ocnmask)

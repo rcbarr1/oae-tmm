@@ -30,7 +30,7 @@ Usage pattern:
 The time-stepping loop in run() does the following at each step:
   1. Updates Canth from TRACE (if scenario != 'none').
   2. Recomputes carbonate chemistry from the current state vector c.
-  3. Rebuilds the A matrix (chemistry parameters change each step as DIC/AT evolve).
+  3. Rebuilds the A matrix (chemistry parameters change each step as CT/AT evolve).
   4. Calls make_q() to get the CDR source/sink for this step.
   5. Advances c by one implicit Euler step (via transport.solve_timestep).
   6. Accumulates output at the frequency specified by output_freq.
@@ -43,6 +43,8 @@ Transport matrix setup similar to Yamamoto et al. (2024).
 import argparse
 import dataclasses
 import gc
+from abc import ABC, abstractmethod
+from typing import Optional
 
 import numpy as np
 import PyCO2SYS as pyco2
@@ -104,12 +106,12 @@ class ExperimentConfig:
     times:               np.ndarray
     output_freq:         int   = 1
     max_steps_per_file:  int   = 0
-    start_CDR:           float      = None
-    q_AT_mask:           np.ndarray = None
-    attrs:               dict       = None
+    start_CDR:           Optional[float]      = None
+    q_AT_mask:           Optional[np.ndarray] = None
+    attrs:               Optional[dict]       = None
 
 
-class BaseExperiment:
+class BaseExperiment(ABC):
     """Shared setup and time-stepping logic for all oae-tmm experiments.
 
     Subclasses must override make_q() to define the CDR perturbation. All
@@ -118,36 +120,38 @@ class BaseExperiment:
 
     After setup() runs, the following attributes are available in make_q():
 
+
     self.m          int             number of ocean grid cells
     self.grid       dict            OCIM grid (see loaders.load_ocim)
     self.surf       dict            surface fields (m,) vectors, 0 at depth
                                     (see loaders.load_ncep_noaa)
-    self.AT         np.ndarray (m,) GLODAP gridded total alkalinity [µmol kg^-1]
-    self.T          np.ndarray (m,) temperature [°C]
-    self.S          np.ndarray (m,) salinity [unitless]
-    self.Si         np.ndarray (m,) silicate [µmol kg^-1]
-    self.P          np.ndarray (m,) phosphate [µmol kg^-1]
-    self.DIC_preind np.ndarray (m,) preindustrial DIC [µmol kg^-1]
+    self.AT          np.ndarray (m,) GLODAP gridded total alkalinity [µmol kg^-1]
+    self.temperature np.ndarray (m,) temperature [°C]
+    self.salinity    np.ndarray (m,) salinity [unitless]
+    self.silicate    np.ndarray (m,) silicate [µmol kg^-1]
+    self.phosphate   np.ndarray (m,) phosphate [µmol kg^-1]
+    self.CT_preind   np.ndarray (m,) preindustrial CT [µmol kg^-1]
     self.Canth      np.ndarray (m,) anthropogenic carbon [µmol kg^-1]
                                     (updated each step in run() when scenario != 'none')
     self.pH_preind  np.ndarray (m,) preindustrial pH [total scale]
     self.k          np.ndarray (m,) piston velocity, zero at depth [m yr^-1]
     """
 
+    m:           int
+    grid:        dict
+    surf:        dict
+    AT:          np.ndarray
+    temperature: np.ndarray
+    salinity:    np.ndarray
+    silicate:    np.ndarray
+    phosphate:   np.ndarray
+    CT_preind:   np.ndarray
+    Canth:       np.ndarray
+    pH_preind:   np.ndarray
+    k:           np.ndarray
+
     def __init__(self, config: ExperimentConfig):
-        self.cfg        = config
-        self.m          = None
-        self.grid       = None
-        self.surf       = None
-        self.AT         = None
-        self.T          = None
-        self.S          = None
-        self.Si         = None
-        self.P          = None
-        self.DIC_preind = None
-        self.Canth      = None
-        self.pH_preind  = None
-        self.k          = None
+        self.cfg = config
 
     def setup(self):
         """Load data and compute preindustrial chemistry.
@@ -164,29 +168,29 @@ class BaseExperiment:
         self.surf = loaders.load_ncep_noaa(self.cfg.data_path, ocnmask)
 
         # GLODAP fields — already flattened to (m,) by load_glodap
-        self.AT = glodap['AT']
-        self.T  = glodap['T']
-        self.S  = glodap['S']
-        self.Si = glodap['Si']
-        self.P  = glodap['P']
+        self.AT          = glodap['AT']
+        self.temperature = glodap['temperature']
+        self.salinity    = glodap['salinity']
+        self.silicate    = glodap['silicate']
+        self.phosphate   = glodap['phosphate']
 
         # piston velocity: calc_piston_velocity receives (m,) vectors with 0 at depth;
         # result is also (m,) with 0 at non-surface cells
         self.k     = chemistry.calc_piston_velocity(self.surf['sst'], self.surf['wspd'])
 
-        # preindustrial DIC: GLODAP DIC minus Canth at 2002 (TRACE historical)
+        # preindustrial CT: GLODAP CT minus Canth at 2002 (TRACE historical)
         Canth_2002 = flatten(self._calc_canth(2002, 'none'), ocnmask)
-        self.DIC_preind = glodap['DIC'] - Canth_2002
+        self.CT_preind = glodap['CT'] - Canth_2002
 
         # Canth at the simulation start year (updated each step during run)
         self.Canth = flatten(self._calc_canth(self.cfg.start_year, self.cfg.scenario), ocnmask)
 
-        # preindustrial pH from GLODAP DIC_preind + GLODAP AT
+        # preindustrial pH from GLODAP CT_preind + GLODAP AT
         # (used in subclasses for CDR targeting)
         co2sys_preind = pyco2.sys(
-            dic=self.DIC_preind, alkalinity=self.AT,
-            salinity=self.S, temperature=self.T, pressure=self.grid['pressure'],
-            total_silicate=self.Si, total_phosphate=self.P,
+            dic=self.CT_preind, alkalinity=self.AT,
+            salinity=self.salinity, temperature=self.temperature, pressure=self.grid['pressure'],
+            total_silicate=self.silicate, total_phosphate=self.phosphate,
         )
         self.pH_preind = co2sys_preind['pH']
         del co2sys_preind
@@ -205,7 +209,7 @@ class BaseExperiment:
         Parameters
         ----------
         c : np.ndarray
-            Current state vector [∆xCO2, ∆DIC (m), ∆AT (m)], shape (2m+1,).
+            Current state vector [∆xCO2, ∆CT (m), ∆AT (m)], shape (2m+1,).
 
         Returns
         -------
@@ -215,18 +219,18 @@ class BaseExperiment:
             R_C         : np.ndarray (m,)  Revelle buffer factor
             R_A         : np.ndarray (m,)  Alkalinity buffer factor
             K0          : np.ndarray (m,)  CO2 solubility [(µmol CO2) m^-3 (µatm CO2)^-1]
-            DIC_current : np.ndarray (m,)  DIC_preind + ∆DIC + Canth [µmol kg^-1]
+            CT_current  : np.ndarray (m,)  CT_preind + ∆CT + Canth [µmol kg^-1]
             AT_current  : np.ndarray (m,)  AT + ∆AT [µmol kg^-1]
         """
         m = self.m
 
-        AT_current  = self.AT + c[(m+1):]
-        DIC_current = self.DIC_preind + c[1:(m+1)] + self.Canth
+        AT_current = self.AT + c[(m+1):]
+        CT_current = self.CT_preind + c[1:(m+1)] + self.Canth
 
         co2sys = pyco2.sys(
-            dic=DIC_current, alkalinity=AT_current,
-            salinity=self.S, temperature=self.T, pressure=self.grid['pressure'],
-            total_silicate=self.Si, total_phosphate=self.P,
+            dic=CT_current, alkalinity=AT_current,
+            salinity=self.salinity, temperature=self.temperature, pressure=self.grid['pressure'],
+            total_silicate=self.silicate, total_phosphate=self.phosphate,
         )
         pCO2        = co2sys['pCO2']           # [µatm]
         aqueous_CO2 = co2sys['CO2']            # [µmol kg^-1]
@@ -235,9 +239,9 @@ class BaseExperiment:
 
         # R_A: (dpCO2/pCO2) / (dAT/AT) — numerical differentiation;
         co2sys_pert = pyco2.sys(
-            dic=DIC_current, alkalinity=AT_current + 1e-6,
-            salinity=self.S, temperature=self.T, pressure=self.grid['pressure'],
-            total_silicate=self.Si, total_phosphate=self.P,
+            dic=CT_current, alkalinity=AT_current + 1e-6,
+            salinity=self.salinity, temperature=self.temperature, pressure=self.grid['pressure'],
+            total_silicate=self.silicate, total_phosphate=self.phosphate,
         )
         pCO2_pert = co2sys_pert['pCO2']
         del co2sys_pert
@@ -252,13 +256,13 @@ class BaseExperiment:
         jax.clear_caches()
 
         return {
-            'pCO2':        pCO2,
+            'pCO2':       pCO2,
             'aqueous_CO2': aqueous_CO2,
-            'R_C':         R_C,
-            'R_A':         R_A,
-            'K0':          K0,
-            'DIC_current': DIC_current,
-            'AT_current':  AT_current,
+            'R_C':        R_C,
+            'R_A':        R_A,
+            'K0':         K0,
+            'CT_current': CT_current,
+            'AT_current': AT_current,
         }
 
     def _calc_canth(self, year: float, scenario: str) -> np.ndarray:
@@ -269,14 +273,15 @@ class BaseExperiment:
         """
         return trace.interp_trace(
             self.cfg.data_path, year, scenario,
-            self.grid['model_lat'], self.grid['model_lon'],
-            self.grid['model_depth'], self.grid['ocnmask'],
+            self.grid['latitude'], self.grid['longitude'],
+            self.grid['depth'], self.grid['ocnmask'],
         )
 
+    @abstractmethod
     def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
         """CDR source/sink flux vector, shape (2m+1,). Must be overridden.
 
-        q[0] [µmol CO2 (µmol air)^-1 yr^-1], q[1:(m+1)] [µmol DIC kg^-1 yr^-1],
+        q[0] [µmol CO2 (µmol air)^-1 yr^-1], q[1:(m+1)] [µmol CT kg^-1 yr^-1],
         q[(m+1):] [µmol AT kg^-1 yr^-1].
         """
         raise NotImplementedError
@@ -323,9 +328,9 @@ class BaseExperiment:
         write_count_in_file = 0
         ds = output.open_simulation_output(
             self._output_path(file_number),
-            self.grid['model_lat'],
-            self.grid['model_lon'],
-            self.grid['model_depth'],
+            self.grid['latitude'],
+            self.grid['longitude'],
+            self.grid['depth'],
             ocnmask,
             attrs=self.cfg.attrs,
         )
@@ -347,9 +352,9 @@ class BaseExperiment:
 
                 # rebuild A (chemistry parameters change each step)
                 A = transport.build_A_matrix(
-                    self.grid['TR'], self.k, self.surf['f_ice'], self.grid['model_vols'],
+                    self.grid['TR'], self.k, self.surf['f_ice'], self.grid['cell_volume'],
                     chem['R_C'], chem['R_A'],
-                    chem['DIC_current'], chem['AT_current'],
+                    chem['CT_current'], chem['AT_current'],
                     chem['aqueous_CO2'], chem['K0'],
                     self.grid['z1'],
                     rho=self.grid['rho'],
@@ -370,9 +375,9 @@ class BaseExperiment:
                         write_count_in_file = 0
                         ds = output.open_simulation_output(
                             self._output_path(file_number),
-                            self.grid['model_lat'],
-                            self.grid['model_lon'],
-                            self.grid['model_depth'],
+                            self.grid['latitude'],
+                            self.grid['longitude'],
+                            self.grid['depth'],
                             ocnmask,
                             attrs=self.cfg.attrs,
                         )

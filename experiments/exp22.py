@@ -33,28 +33,28 @@ class Exp22(BaseExperiment):
     """
 
     def setup(self):
-        """Load T_3D and S_3D for pyTRACE, then delegate to BaseExperiment.setup()."""
+        """Load temperature_3d and salinity_3d for pyTRACE, then delegate to BaseExperiment.setup()."""
         base = self.cfg.data_path + 'GLODAPv2.2016b.MappedProduct/'
-        self.T_3D = np.load(base + 'temperature.npy')
-        self.S_3D = np.load(base + 'salinity.npy')
+        self.temperature_3d = np.load(base + 'temperature.npy')
+        self.salinity_3d = np.load(base + 'salinity.npy')
         super().setup()
 
     def _calc_canth(self, year: float, scenario: str) -> np.ndarray:
         """Compute Canth by calling pyTRACE directly at every ocean grid cell."""
         return trace.calculate_canth(
-            scenario, year, self.T_3D, self.S_3D,
+            scenario, year, self.temperature_3d, self.salinity_3d,
             self.grid['ocnmask'],
-            self.grid['model_lat'], self.grid['model_lon'],
-            self.grid['model_depth'],
+            self.grid['latitude'], self.grid['longitude'],
+            self.grid['depth'],
         )
 
     def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
-        """Add AT to restore preindustrial pH at masked cells; no DIC change (NaOH)."""
+        """Add AT to restore preindustrial pH at masked cells; no CT change (NaOH)."""
         q = np.zeros(1 + 2 * self.m)
         co2sys_desired = pyco2.sys(
-            dic=chem['DIC_current'], pH=self.pH_preind,
-            salinity=self.S, temperature=self.T, pressure=self.grid['pressure'],
-            total_silicate=self.Si, total_phosphate=self.P,
+            dic=chem['CT_current'], pH=self.pH_preind,
+            salinity=self.salinity, temperature=self.temperature, pressure=self.grid['pressure'],
+            total_silicate=self.silicate, total_phosphate=self.phosphate,
         )
         AT_desired = co2sys_desired['alkalinity']
         del co2sys_desired
@@ -72,8 +72,12 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     grid    = loaders.load_ocim(data_path)
     ocnmask = grid['ocnmask']
 
-    grid_cell_depth_3d = make_3d(grid['grid_cell_depth'], ocnmask)
-    mldmask   = (grid_cell_depth_3d < grid['mld'][:, :, None]).astype(int)
+    cell_top_depth_3d = make_3d(grid['cell_top_depth'], ocnmask)
+    cell_bottom_depth_3d = np.concatenate(
+        [cell_top_depth_3d[:, :, 1:], np.full((*cell_top_depth_3d.shape[:2], 1), np.inf)],
+        axis=2,
+    )
+    mldmask   = (cell_bottom_depth_3d < grid['mld'][:, :, None]).astype(int)
     q_AT_mask = flatten(mldmask * ocnmask, ocnmask)
 
     start_year = 2020.0

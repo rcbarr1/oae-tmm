@@ -5,8 +5,8 @@ Provides two public functions:
 
   build_A_matrix — assembles the 2m+1 × 2m+1 sparse block matrix A that
       describes ocean transport and linearized air-sea CO2 exchange for one
-      timestep. The carbonate chemistry parameters (R_C, R_A, DIC, AT, aqueous_CO2,
-      K0) change each timestep as DIC and AT evolve, so this function is
+      timestep. The carbonate chemistry parameters (R_C, R_A, CT, AT, aqueous_CO2,
+      K0) change each timestep as CT and AT evolve, so this function is
       called inside the time loop by each experiment.
 
   solve_timestep — advances the state vector by one implicit Euler step using
@@ -15,14 +15,14 @@ Provides two public functions:
 Governing equations encoded in A (units in brackets):
 
     1. d(∆xCO2)/dt = ∆q_sea-air,xCO2                              [µmol CO2 (µmol air)^-1 yr^-1] (same as [µatm CO2 (µatm air)^-1 yr^-1])
-    2. d(∆DIC)/dt  = TR * ∆DIC + ∆q_air-sea,DIC + ∆q_CDR,DIC      [µmol DIC (kg seawater)^-1 yr^-1]
+    2. d(∆CT)/dt   = TR * ∆CT + ∆q_air-sea,CT + ∆q_CDR,CT        [µmol CT (kg seawater)^-1 yr^-1]
     3. d(∆AT)/dt   = TR * ∆AT  + ∆q_CDR,AT                        [µmol AT (kg seawater)^-1 yr^-1]
 
 Air-sea fluxes depend on ∆c (not on external forcing), so they fold into A
 rather than the source vector q:
 
-    ∆q_sea-air,xCO2 = gammax * (rho * R_C * ∆DIC/beta_C + rho * R_A * ∆AT/beta_A - K0 * Patm * ∆xCO2)
-    ∆q_air-sea,DIC  = gammaC * (R_C * ∆DIC/beta_C + R_A * ∆AT/beta_A - K0 * Patm/rho * ∆xCO2)
+    ∆q_sea-air,xCO2 = gammax * (rho * R_C * ∆CT/beta_C + rho * R_A * ∆AT/beta_A - K0 * Patm * ∆xCO2)
+    ∆q_air-sea,CT   = gammaC * (R_C * ∆CT/beta_C + R_A * ∆AT/beta_A - K0 * Patm/rho * ∆xCO2)
 
     where gammax = k * V * (1 - f_ice) / Ma / z1
           gammaC = -k * (1 - f_ice) / z1
@@ -47,7 +47,7 @@ def build_A_matrix(
     V: np.ndarray,
     R_C: np.ndarray,
     R_A: np.ndarray,
-    DIC: np.ndarray,
+    CT: np.ndarray,
     AT: np.ndarray,
     aqueous_CO2: np.ndarray,
     K0: np.ndarray,
@@ -59,13 +59,13 @@ def build_A_matrix(
     """Assemble the 2m+1 × 2m+1 sparse block matrix A.
 
     Encodes ocean carbon transport (TR) and linearized air-sea CO2 exchange
-    for state vector c = [∆xCO2 [µmol CO2 (µmol air)^-1], ∆DIC (m cells) [µmol kg^-1], ∆AT (m cells) [µmol kg^-1]]:
+    for state vector c = [∆xCO2 [µmol CO2 (µmol air)^-1], ∆CT (m cells) [µmol kg^-1], ∆AT (m cells) [µmol kg^-1]]:
 
         A = [-gammax * K0 * Patm       | gammax * rho * R_C / beta_C | gammax * rho * R_A / beta_A]
             [-gammaC * K0 * Patm / rho | TR + gammaC * R_C / beta_C  | gammaC * R_A / beta_A      ]
             [0                         | 0                           | TR                         ]
 
-    where beta_C = DIC/aqueous_CO2 and beta_A = AT/aqueous_CO2 are computed
+    where beta_C = CT/aqueous_CO2 and beta_A = AT/aqueous_CO2 are computed
     internally (unitless).
 
     gammax = k * V * (1 - f_ice) / Ma / z1 and gammaC = -k * (1 - f_ice) / z1
@@ -90,10 +90,10 @@ def build_A_matrix(
     V : np.ndarray
         Ocean cell volumes [m^3], shape (m,).
     R_C : np.ndarray
-        Revelle buffer factor (dpCO2/pCO2)/(dDIC/DIC) [unitless], shape (m,).
+        Revelle buffer factor (dpCO2/pCO2)/(dCT/CT) [unitless], shape (m,).
     R_A : np.ndarray
         Alkalinity buffer factor (dpCO2/pCO2)/(dAT/AT) [unitless], shape (m,).
-    DIC : np.ndarray
+    CT : np.ndarray
         Dissolved inorganic carbon [µmol kg^-1], shape (m,).
     AT : np.ndarray
         Total alkalinity [µmol kg^-1], shape (m,).
@@ -117,17 +117,17 @@ def build_A_matrix(
     """
     m = TR.shape[0]
 
-    beta_C = DIC / aqueous_CO2
+    beta_C = CT / aqueous_CO2
     beta_A = AT / aqueous_CO2
 
     # air-sea exchange coefficients (zero for subsurface cells since k=0 there)
     gammax = k * V * (1 - f_ice) / Ma / z1
     gammaC = -k * (1 - f_ice) / z1
 
-    # Block structure — c = [∆xCO2 (1) [µmol CO2 (µmol air)^-1], ∆DIC (m) [µmol kg^-1], ∆AT (m) [µmol kg^-1]], total length 2m+1:
+    # Block structure — c = [∆xCO2 (1) [µmol CO2 (µmol air)^-1], ∆CT (m) [µmol kg^-1], ∆AT (m) [µmol kg^-1]], total length 2m+1:
     #
     #   A = [ A00: 1×1  | A01: 1×m  | A02: 1×m  ]  ← calculates d(∆xCO2)/dt
-    #       [ A10: m×1  | A11: m×m  | A12: m×m  ]  ← calculates d(∆DIC)/dt
+    #       [ A10: m×1  | A11: m×m  | A12: m×m  ]  ← calculates d(∆CT)/dt
     #       [ A20: m×1  | A21: m×m  | A22: m×m  ]  ← calculates d(∆AT)/dt
     #
     #   A00 = -gammax * K0 * Patm             scalar (summed over surface cells)
@@ -150,7 +150,7 @@ def build_A_matrix(
     A0_[1:(m+1)] = A01
     A0_[(m+1):] = A02
 
-    # --- row 1: ∆DIC equation ---
+    # --- row 1: ∆CT equation ---
     A10 = -gammaC * K0 * Patm / rho                                          # (m,)
     A11 = TR + sparse.diags(gammaC * R_C / beta_C, format='csr')
     A12 = sparse.diags(gammaC * R_A / beta_A)
@@ -202,7 +202,7 @@ def solve_timestep(
         State vector at the previous time step, shape (2m+1,).
     q : np.ndarray
         Source/sink flux vector, shape (2m+1,). q[0] [µmol CO2 (µmol air)^-1 yr^-1],
-        q[1:(m+1)] [µmol DIC kg^-1 yr^-1], q[(m+1):] [µmol AT kg^-1 yr^-1].
+        q[1:(m+1)] [µmol CT kg^-1 yr^-1], q[(m+1):] [µmol AT kg^-1 yr^-1].
     dt : float
         Time step [yr].
     solver_opts : dict, optional

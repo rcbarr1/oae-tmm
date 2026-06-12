@@ -47,7 +47,7 @@ def schmidt_number(gas: str, temperature: np.ndarray) -> np.ndarray:
     return Sc
 
 
-def calc_piston_velocity(sst_2D: np.ndarray, wspd_2D: np.ndarray) -> np.ndarray:
+def calc_piston_velocity(sst_2d: np.ndarray, wspd_2d: np.ndarray) -> np.ndarray:
     """Compute the CO2 piston velocity from sea surface temperature and wind speed.
 
     Implements the Wanninkhof (2014) parameterization:
@@ -65,9 +65,9 @@ def calc_piston_velocity(sst_2D: np.ndarray, wspd_2D: np.ndarray) -> np.ndarray:
 
     Parameters
     ----------
-    sst_2D : np.ndarray
+    sst_2d : np.ndarray
         Annual mean sea surface temperature [degrees C], shape (n_lat, n_lon).
-    wspd_2D : np.ndarray
+    wspd_2d : np.ndarray
         Annual mean wind speed at 10 m [m s^-1], shape (n_lat, n_lon).
 
     Returns
@@ -75,8 +75,8 @@ def calc_piston_velocity(sst_2D: np.ndarray, wspd_2D: np.ndarray) -> np.ndarray:
     np.ndarray
         Piston velocity [m yr^-1], shape (n_lat, n_lon).
     """
-    Sc_2D = schmidt_number('CO2', sst_2D)
-    k_2D = 0.251 * wspd_2D**2 * (Sc_2D / 660)**-0.5  # [cm h^-1]
-    k_2D *= (24 * 365.25 / 100)  # convert cm h^-1 to m yr^-1
-    return k_2D
+    Sc_2d = schmidt_number('CO2', sst_2d)
+    k_2d = 0.251 * wspd_2d**2 * (Sc_2d / 660)**-0.5  # [cm h^-1]
+    k_2d *= (24 * 365.25 / 100)  # convert cm h^-1 to m yr^-1
+    return k_2d
 

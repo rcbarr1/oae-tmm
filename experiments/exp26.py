@@ -6,7 +6,7 @@ random factor drawn from N(1, 0.2). Each run adds a pulse of 1 µmol AT kg-1
 to every surface ocean cell at the first time step, then lets the system
 equilibrate over 20 years at monthly resolution.
 
-CDR assumption: NaOH (no DIC change). 'none' emissions scenario.
+CDR assumption: NaOH (no CT change). 'none' emissions scenario.
 
 CLI usage:
     python -m experiments.exp26 --exp-id 0

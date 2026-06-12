@@ -331,7 +331,7 @@ def test_build_A_matrix():
     # Generic positive-definite physical parameters
     R_C        = rng.random(m) * 10 + 5
     R_A        = rng.random(m) * (-10) - 5
-    DIC        = rng.random(m) * 100 + 1900
+    CT         = rng.random(m) * 100 + 1900
     AT         = rng.random(m) * 100 + 2200
     aqueous_CO2 = rng.random(m) * 10 + 5
     K0         = rng.random(m) * 1e-2 + 1e-3
@@ -341,13 +341,13 @@ def test_build_A_matrix():
     # --- Shape and CSR format ---
     k = rng.random(m) * 5.0
     f_ice = rng.random(m) * 0.3
-    A = build_A_matrix(TR, k, f_ice, V, R_C, R_A, DIC, AT, aqueous_CO2, K0, z1)
+    A = build_A_matrix(TR, k, f_ice, V, R_C, R_A, CT, AT, aqueous_CO2, K0, z1)
     passed &= _check(A.shape == (2*m + 1, 2*m + 1),
                      f'A shape: expected ({2*m+1},{2*m+1}), got {A.shape}')
     passed &= _check(A.format == 'csr', f'A format: expected csr, got {A.format!r}')
 
     # --- k=0 → air-sea exchange vanishes; only TR remains in diagonal blocks ---
-    A0 = build_A_matrix(TR, np.zeros(m), np.zeros(m), V, R_C, R_A, DIC, AT, aqueous_CO2, K0, z1)
+    A0 = build_A_matrix(TR, np.zeros(m), np.zeros(m), V, R_C, R_A, CT, AT, aqueous_CO2, K0, z1)
     Ad = A0.toarray()
 
     # Row 0 (∆xCO2 equation) should be all zeros (no air-sea flux)
@@ -356,21 +356,21 @@ def test_build_A_matrix():
     # Column 0 (∆xCO2 → ocean coupling) should be all zeros
     passed &= _check(np.allclose(Ad[:, 0], 0.0), 'k=0: xCO2 column (col 0) is all zeros')
 
-    # DIC-DIC block [1:m+1, 1:m+1] should equal TR exactly
+    # CT-CT block [1:m+1, 1:m+1] should equal TR exactly
     passed &= _check(np.allclose(Ad[1:m+1, 1:m+1], TR_dense),
-                     'k=0: DIC-DIC block equals TR')
+                     'k=0: CT-CT block equals TR')
 
-    # DIC-AT cross block [1:m+1, m+1:] should be zero
+    # CT-AT cross block [1:m+1, m+1:] should be zero
     passed &= _check(np.allclose(Ad[1:m+1, m+1:], 0.0),
-                     'k=0: DIC-AT cross block is zeros')
+                     'k=0: CT-AT cross block is zeros')
 
     # AT-AT block [m+1:, m+1:] should equal TR exactly
     passed &= _check(np.allclose(Ad[m+1:, m+1:], TR_dense),
                      'k=0: AT-AT block equals TR')
 
-    # AT-DIC cross block [m+1:, 1:m+1] should always be zero (AT not influenced by DIC)
+    # AT-CT cross block [m+1:, 1:m+1] should always be zero (AT not influenced by CT)
     passed &= _check(np.allclose(Ad[m+1:, 1:m+1], 0.0),
-                     'k=0: AT-DIC cross block is zeros')
+                     'k=0: AT-CT cross block is zeros')
 
     # --- With nonzero k: A00 should be negative (∆xCO2 is damped by gas exchange) ---
     passed &= _check(A.toarray()[0, 0] < 0,
@@ -465,18 +465,18 @@ def test_output_write_step():
             passed &= _check(np.isclose(nc['xCO2_added'][0], q_dt[0] * 1e6, rtol=1e-5),
                              f'xCO2_added = q_dt[0]×1e6: expected {q_dt[0]*1e6:.4f}, got {float(nc["xCO2_added"][0]):.4f}')
 
-            # DIC slicing: c[1:m+1] maps to ocean cells in F-order
-            delDIC = nc['delDIC'][0]   # shape (3, 2, 2)
-            passed &= _check(np.isclose(delDIC[0, 0, 0], c[1], rtol=1e-5),
-                             f'delDIC ocean cell 0 → (0,0,0): expected {c[1]}, got {delDIC[0,0,0]:.4f}')
-            passed &= _check(np.isclose(delDIC[1, 0, 0], c[2], rtol=1e-5),
-                             f'delDIC ocean cell 1 → (1,0,0): expected {c[2]}, got {delDIC[1,0,0]:.4f}')
-            passed &= _check(np.isclose(delDIC[0, 1, 0], c[3], rtol=1e-5),
-                             f'delDIC ocean cell 2 → (0,1,0): expected {c[3]}, got {delDIC[0,1,0]:.4f}')
-            passed &= _check(np.isclose(delDIC[0, 0, 1], c[4], rtol=1e-5),
-                             f'delDIC ocean cell 3 → (0,0,1): expected {c[4]}, got {delDIC[0,0,1]:.4f}')
-            passed &= _check(np.isnan(delDIC[2, 0, 0]),
-                             'delDIC at land cell (2,0,0) is NaN')
+            # CT slicing: c[1:m+1] maps to ocean cells in F-order
+            delCT = nc['delCT'][0]   # shape (3, 2, 2)
+            passed &= _check(np.isclose(delCT[0, 0, 0], c[1], rtol=1e-5),
+                             f'delCT ocean cell 0 → (0,0,0): expected {c[1]}, got {delCT[0,0,0]:.4f}')
+            passed &= _check(np.isclose(delCT[1, 0, 0], c[2], rtol=1e-5),
+                             f'delCT ocean cell 1 → (1,0,0): expected {c[2]}, got {delCT[1,0,0]:.4f}')
+            passed &= _check(np.isclose(delCT[0, 1, 0], c[3], rtol=1e-5),
+                             f'delCT ocean cell 2 → (0,1,0): expected {c[3]}, got {delCT[0,1,0]:.4f}')
+            passed &= _check(np.isclose(delCT[0, 0, 1], c[4], rtol=1e-5),
+                             f'delCT ocean cell 3 → (0,0,1): expected {c[4]}, got {delCT[0,0,1]:.4f}')
+            passed &= _check(np.isnan(delCT[2, 0, 0]),
+                             'delCT at land cell (2,0,0) is NaN')
 
             # AT slicing: c[m+1:] = c[5:]
             delAT = nc['delAT'][0]
@@ -490,6 +490,65 @@ def test_output_write_step():
                              f'time coordinate: expected 2020.5, got {float(nc["time"][0])}')
     finally:
         os.unlink(tmp)
+
+    return passed
+
+
+# ── MLD mask logic ───────────────────────────────────────────────────────────
+
+def test_mld_mask():
+    """MLD mask: cells fully within the mixed layer = cell bottom depth < MLD.
+
+    Bottom of cell k = top of cell k+1 (shifted cell_top_depth_3d).
+    Deepest cell gets inf bottom depth → never included.
+    """
+    print('\n--- MLD mask logic ---')
+    passed = True
+
+    # 1×2 spatial grid, 4 depth levels
+    # cell_top_depth_3d[lat, lon, k] = depth of the top of cell k
+    cell_top_depth_3d = np.array([[[  0.,  50., 100., 200.],   # lon 0
+                                   [  0.,  30.,  80., 180.]]])  # lon 1  shape (1,2,4)
+    mld = np.array([[75., 95.]])   # shape (1,2)
+
+    cell_bottom_depth_3d = np.concatenate(
+        [cell_top_depth_3d[:, :, 1:], np.full((*cell_top_depth_3d.shape[:2], 1), np.inf)],
+        axis=2,
+    )
+    mldmask = (cell_bottom_depth_3d < mld[:, :, None]).astype(int)
+
+    # lon 0: bottoms=[50,100,200,inf], MLD=75 → only cell 0 (bottom=50) qualifies
+    passed &= _check(list(mldmask[0, 0]) == [1, 0, 0, 0],
+                     f'lon 0 (MLD=75m): expected [1,0,0,0], got {list(mldmask[0, 0])}')
+
+    # lon 1: bottoms=[30,80,180,inf], MLD=95 → cells 0 and 1 qualify (bottoms 30 and 80 < 95)
+    passed &= _check(list(mldmask[0, 1]) == [1, 1, 0, 0],
+                     f'lon 1 (MLD=95m): expected [1,1,0,0], got {list(mldmask[0, 1])}')
+
+    # Strict inequality: cell whose bottom == MLD is NOT included
+    cell_top_exact = np.array([[[0., 50., 100., 200.]]])   # shape (1,1,4)
+    mld_exact      = np.array([[50.]])                     # MLD == bottom of cell 0
+    cell_bottom_exact = np.concatenate(
+        [cell_top_exact[:, :, 1:], np.full((*cell_top_exact.shape[:2], 1), np.inf)],
+        axis=2,
+    )
+    mldmask_exact = (cell_bottom_exact < mld_exact[:, :, None]).astype(int)
+    passed &= _check(mldmask_exact[0, 0, 0] == 0,
+                     f'strict <: bottom=MLD=50 excluded (got {mldmask_exact[0, 0, 0]})')
+
+    # Deepest cell always excluded (padded with inf)
+    passed &= _check(mldmask[0, 0, -1] == 0 and mldmask[0, 1, -1] == 0,
+                     'deepest cell always excluded (inf bottom depth)')
+
+    # bottom-depth shift: cell_bottom[k] == cell_top[k+1] for all interior cells
+    for k in range(cell_top_depth_3d.shape[2] - 1):
+        passed &= _check(
+            cell_bottom_depth_3d[0, 0, k] == cell_top_depth_3d[0, 0, k + 1],
+            f'cell_bottom[{k}] = cell_top[{k+1}]: '
+            f'{cell_bottom_depth_3d[0,0,k]} == {cell_top_depth_3d[0,0,k+1]}',
+        )
+    passed &= _check(np.isinf(cell_bottom_depth_3d[0, 0, -1]),
+                     f'last cell bottom = inf: got {cell_bottom_depth_3d[0, 0, -1]}')
 
     return passed
 
@@ -546,6 +605,7 @@ if __name__ == '__main__':
         ('build_A_matrix',         test_build_A_matrix),
         ('write_simulation_step',  test_output_write_step),
         ('_output_path',           test_output_path),
+        ('MLD mask logic',         test_mld_mask),
     ]
 
     results = {}

@@ -37,7 +37,7 @@ from pyTRACE import trace
 from oae_tmm.grid import inpaint_nans_3d, make_3d
 
 
-def interp_trace(data_path, time, scenario, lat, lon, depth, ocnmask):
+def interp_trace(data_path, time, scenario, latitude, longitude, depth, ocnmask):
     """Interpolate TRACE gridded Canth product to the OCIM2-48L grid.
 
     Opens the appropriate TRACE netCDF file for the given time and emissions
@@ -47,8 +47,8 @@ def interp_trace(data_path, time, scenario, lat, lon, depth, ocnmask):
 
     If time is before 2020, historical/none scenario is used. If time is
     after 2020, one of the following emissions scenarios must be specified:
-    ssp119, ssp126, ssp245, ssp370, ssp370_lowNTCF, ssp434, ssp460, ssp534_OS	
-    
+    ssp119, ssp126, ssp245, ssp370, ssp370_lowNTCF, ssp434, ssp460, ssp534_OS
+
     TRACE data source: https://zenodo.org/records/15003059.
 
     Parameters
@@ -60,9 +60,9 @@ def interp_trace(data_path, time, scenario, lat, lon, depth, ocnmask):
     scenario : str
         Emissions scenario. One of: 'none', 'ssp119', 'ssp126', 'ssp245',
         'ssp370', 'ssp370_lowNTCF', 'ssp434', 'ssp460', 'ssp534_OS'.
-    lat : np.ndarray
+    latitude : np.ndarray
         1D array of OCIM2-48L latitudes [°N].
-    lon : np.ndarray
+    longitude : np.ndarray
         1D array of OCIM2-48L longitudes [°E].
     depth : np.ndarray
         1D array of OCIM2-48L depth levels [m].
@@ -141,21 +141,21 @@ def interp_trace(data_path, time, scenario, lat, lon, depth, ocnmask):
     )
 
     # TRACE longitude runs 20°E–380°E; temporarily shift OCIM longitudes < 20°E to match
-    lon[lon < 20] += 360
+    longitude[longitude < 20] += 360
 
-    lat_grid, lon_grid, depth_grid = np.meshgrid(lat, lon, depth, indexing='ij')
+    lat_grid, lon_grid, depth_grid = np.meshgrid(latitude, longitude, depth, indexing='ij')
     query_points = np.column_stack([lat_grid.ravel(), lon_grid.ravel(), depth_grid.ravel()])
 
     canth = interp(query_points).reshape(lat_grid.shape)
     canth = inpaint_nans_3d(canth, mask=ocnmask)
 
     # shift longitudes back
-    lon[lon > 360] -= 360
+    longitude[longitude > 360] -= 360
 
     return canth
 
 
-def calculate_canth(scenario, year, T_3D, S_3D, ocnmask, lat, lon, depth):
+def calculate_canth(scenario, year, temperature_3d, salinity_3d, ocnmask, latitude, longitude, depth):
     """Predict anthropogenic carbon using TRACE.
 
     Runs TRACE at every ocean grid cell using temperature and salinity as
@@ -175,15 +175,15 @@ def calculate_canth(scenario, year, T_3D, S_3D, ocnmask, lat, lon, depth):
         in the time loop (scenario != 'none' check in BaseExperiment.run).
     year : float
         Year to evaluate anthropogenic carbon at [decimal years CE].
-    T_3D : np.ndarray
+    temperature_3d : np.ndarray
         Temperature [°C], shape (n_lat, n_lon, n_depth).
-    S_3D : np.ndarray
+    salinity_3d : np.ndarray
         Salinity [unitless], shape (n_lat, n_lon, n_depth).
     ocnmask : np.ndarray
         Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
-    lat : np.ndarray
+    latitude : np.ndarray
         1D array of OCIM2-48L latitudes [°N].
-    lon : np.ndarray
+    longitude : np.ndarray
         1D array of OCIM2-48L longitudes [°E].
     depth : np.ndarray
         1D array of OCIM2-48L depth levels [m].
@@ -204,16 +204,16 @@ def calculate_canth(scenario, year, T_3D, S_3D, ocnmask, lat, lon, depth):
     }
 
     # pyTRACE expects (lon, lat, depth) ordering — transpose from OCIM (lat, lon, depth)
-    T_3D_T = T_3D.transpose([1, 0, 2])
-    S_3D_T = S_3D.transpose([1, 0, 2])
+    temperature_3d_T = temperature_3d.transpose([1, 0, 2])
+    salinity_3d_T    = salinity_3d.transpose([1, 0, 2])
     ocnmask_T = ocnmask.transpose([1, 0, 2])
 
     predictor_measurements = np.vstack([
-        S_3D_T.flatten(order='F'), T_3D_T.flatten(order='F'),
+        salinity_3d_T.flatten(order='F'), temperature_3d_T.flatten(order='F'),
     ]).T
     predictor_measurements = predictor_measurements[ocnmask_T.flatten(order='F').astype(bool)]
 
-    lon_grid, lat_grid, depth_grid = np.meshgrid(lon, lat, depth, indexing='ij')
+    lon_grid, lat_grid, depth_grid = np.meshgrid(longitude, latitude, depth, indexing='ij')
     ocim_coordinates = np.column_stack([
         lon_grid.ravel(order='F'),
         lat_grid.ravel(order='F'),
@@ -255,6 +255,6 @@ def calculate_canth(scenario, year, T_3D, S_3D, ocnmask, lat, lon, depth):
     )
 
     # expand back to (lon, lat, depth), then transpose to OCIM (lat, lon, depth)
-    canth_3D = make_3d(trace_output.canth.values, ocnmask_T).transpose([1, 0, 2])
+    canth_3d = make_3d(trace_output.canth.values, ocnmask_T).transpose([1, 0, 2])
 
-    return canth_3D
+    return canth_3d

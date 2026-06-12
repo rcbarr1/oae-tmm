@@ -13,7 +13,7 @@ Provides two public functions for streaming output (one timestep at a time):
 
 Typical usage:
 
-    with output.open_simulation_output(path, lat, lon, depth, ocnmask) as ds:
+    with output.open_simulation_output(path, latitude, longitude, depth, ocnmask) as ds:
         for i, (c, q, t) in enumerate(simulation):
             output.write_simulation_step(ds, c, q * dt, t, ocnmask)
             if i % 20 == 0:
@@ -23,14 +23,16 @@ Output variable conventions
 ---------------------------
 All variables use float32 to keep file sizes manageable.
 
-  delDIC, delAT       [µmol kg⁻¹]  perturbation state (from c)
-  DIC_added, AT_added [µmol kg⁻¹]  integrated source per timestep (from q·dt)
+  delCT, delAT       [µmol kg⁻¹]  perturbation state (from c)
+  CT_added, AT_added [µmol kg⁻¹]  integrated source per timestep (from q·dt)
   delxCO2, xCO2_added [ppm]        atmospheric CO₂ perturbation (from c and
                                    q·dt, converted from mol mol^-1 * 1e6)
 
 Chunking: one time slice per chunk (1, n_lat, n_lon, n_depth) so that
 reading a single timestep never loads the entire file. zlib complevel=4.
 """
+
+from typing import Optional
 
 import numpy as np
 from netCDF4 import Dataset
@@ -40,11 +42,11 @@ from oae_tmm.grid import make_3d
 
 def open_simulation_output(
     path: str,
-    lat: np.ndarray,
-    lon: np.ndarray,
+    latitude: np.ndarray,
+    longitude: np.ndarray,
     depth: np.ndarray,
     ocnmask: np.ndarray,
-    attrs: dict = None,
+    attrs: Optional[dict] = None,
 ) -> Dataset:
     """Create and initialize a NETCDF4 simulation output file.
 
@@ -60,9 +62,9 @@ def open_simulation_output(
     ----------
     path : str
         Output file path (including .nc extension).
-    lat : np.ndarray
+    latitude : np.ndarray
         1D array of OCIM2-48L latitudes [°N].
-    lon : np.ndarray
+    longitude : np.ndarray
         1D array of OCIM2-48L longitudes [°E].
     depth : np.ndarray
         1D array of OCIM2-48L depth levels [m].
@@ -84,20 +86,20 @@ def open_simulation_output(
         ds.setncatts(attrs)
 
     ds.createDimension('time', None)   # unlimited
-    ds.createDimension('lat', n_lat)
-    ds.createDimension('lon', n_lon)
+    ds.createDimension('latitude', n_lat)
+    ds.createDimension('longitude', n_lon)
     ds.createDimension('depth', n_depth)
 
     tv = ds.createVariable('time', 'f8', ('time',))
     tv.units = 'year'
 
-    lav = ds.createVariable('lat', 'f4', ('lat',))
+    lav = ds.createVariable('latitude', 'f4', ('latitude',))
     lav.units = 'degrees_north'
-    lav[:] = lat
+    lav[:] = latitude
 
-    lov = ds.createVariable('lon', 'f4', ('lon',))
+    lov = ds.createVariable('longitude', 'f4', ('longitude',))
     lov.units = 'degrees_east'
-    lov[:] = lon
+    lov[:] = longitude
 
     dv = ds.createVariable('depth', 'f4', ('depth',))
     dv.units = 'meters'
@@ -108,13 +110,13 @@ def open_simulation_output(
     chunk1d = (1,)
     kw1d = dict(zlib=True, complevel=4, chunksizes=chunk1d)
 
-    v = ds.createVariable('delDIC',     'f4', ('time', 'lat', 'lon', 'depth'), **kw4d)
+    v = ds.createVariable('delCT',      'f4', ('time', 'latitude', 'longitude', 'depth'), **kw4d)
     v.units = 'umol kg-1'
-    v = ds.createVariable('DIC_added',  'f4', ('time', 'lat', 'lon', 'depth'), **kw4d)
+    v = ds.createVariable('CT_added',   'f4', ('time', 'latitude', 'longitude', 'depth'), **kw4d)
     v.units = 'umol kg-1'
-    v = ds.createVariable('delAT',      'f4', ('time', 'lat', 'lon', 'depth'), **kw4d)
+    v = ds.createVariable('delAT',      'f4', ('time', 'latitude', 'longitude', 'depth'), **kw4d)
     v.units = 'umol kg-1'
-    v = ds.createVariable('AT_added',   'f4', ('time', 'lat', 'lon', 'depth'), **kw4d)
+    v = ds.createVariable('AT_added',   'f4', ('time', 'latitude', 'longitude', 'depth'), **kw4d)
     v.units = 'umol kg-1'
     v = ds.createVariable('delxCO2',    'f4', ('time',), **kw1d)
     v.units = 'ppm'
@@ -133,7 +135,7 @@ def write_simulation_step(
 ) -> None:
     """Append one timestep to an open simulation output file.
 
-    Partitions c and q_dt into their tracer components (∆xCO2, ∆DIC, ∆AT),
+    Partitions c and q_dt into their tracer components (∆xCO2, ∆CT, ∆AT),
     reshapes flat ocean-only vectors to 3D with make_3d, and appends to the
     unlimited time dimension.
 
@@ -142,7 +144,7 @@ def write_simulation_step(
     ds : netCDF4.Dataset
         Open dataset returned by open_simulation_output().
     c : np.ndarray
-        State vector [∆xCO2, ∆DIC (m), ∆AT (m)], shape (2m+1,).
+        State vector [∆xCO2, ∆CT (m), ∆AT (m)], shape (2m+1,).
     q_dt : np.ndarray
         Source/sink vector * timestep [tracer units], shape (2m+1,).
         Pass q * dt (not the raw flux rate q) so stored values are integrated
@@ -158,7 +160,7 @@ def write_simulation_step(
     ds.variables['time'][i]        = time
     ds.variables['delxCO2'][i]     = np.float32(c[0] * 1e6)      # multiply by 1e6 to convert delxCO2 units from unitless [µatm CO2 / µatm air] or [µmol CO2 / µmol air]to ppm
     ds.variables['xCO2_added'][i]  = np.float32(q_dt[0] * 1e6)   # multiply by 1e6 to convert delxCO2 units from unitless [µatm CO2 / µatm air] or [µmol CO2 / µmol air]to ppm
-    ds.variables['delDIC'][i]      = make_3d(c[1:(m+1)], ocnmask).astype('float32')
-    ds.variables['DIC_added'][i]   = make_3d(q_dt[1:(m+1)], ocnmask).astype('float32')
+    ds.variables['delCT'][i]       = make_3d(c[1:(m+1)], ocnmask).astype('float32')
+    ds.variables['CT_added'][i]    = make_3d(q_dt[1:(m+1)], ocnmask).astype('float32')
     ds.variables['delAT'][i]       = make_3d(c[(m+1):], ocnmask).astype('float32')
     ds.variables['AT_added'][i]    = make_3d(q_dt[(m+1):], ocnmask).astype('float32')

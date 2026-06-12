@@ -21,8 +21,8 @@ from scipy.interpolate import RegularGridInterpolator
 from oae_tmm.grid import inpaint_nans_3d, inpaint_nans_2d
 
 
-def regrid_glodap(data_path: str, glodap_var: str, model_lat: np.ndarray,
-                  model_lon: np.ndarray, model_depth: np.ndarray,
+def regrid_glodap(data_path: str, glodap_var: str, latitude: np.ndarray,
+                  longitude: np.ndarray, depth: np.ndarray,
                   ocnmask: np.ndarray) -> None:
     """Regrid a GLODAPv2.2016b mapped variable to the OCIM grid and save as .npy.
 
@@ -41,11 +41,11 @@ def regrid_glodap(data_path: str, glodap_var: str, model_lat: np.ndarray,
     glodap_var : str
         Variable name as it appears in the GLODAP NetCDF file (e.g., 'TCO2',
         'TAlk', 'temperature', 'salinity', 'silicate', 'PO4').
-    model_lat : np.ndarray
+    latitude : np.ndarray
         1D array of OCIM2-48L latitude values [degrees N].
-    model_lon : np.ndarray
+    longitude : np.ndarray
         1D array of OCIM2-48L longitude values [degrees E, 0-360].
-    model_depth : np.ndarray
+    depth : np.ndarray
         1D array of OCIM2-48L depth values [m].
     ocnmask : np.ndarray
         Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
@@ -69,34 +69,34 @@ def regrid_glodap(data_path: str, glodap_var: str, model_lat: np.ndarray,
     )
 
     # GLODAP longitudes run from 20E to 380E; shift model lons to match
-    model_lon[model_lon < 20] += 360
+    longitude[longitude < 20] += 360
 
-    lat, lon, depth = np.meshgrid(model_lat, model_lon, model_depth, indexing='ij')
-    query_points = np.array([lat.ravel(), lon.ravel(), depth.ravel()]).T
-    var = interp(query_points).reshape(depth.shape)
+    lat_grid, lon_grid, depth_grid = np.meshgrid(latitude, longitude, depth, indexing='ij')
+    query_points = np.array([lat_grid.ravel(), lon_grid.ravel(), depth_grid.ravel()]).T
+    var = interp(query_points).reshape(depth_grid.shape)
 
     var = inpaint_nans_3d(var, mask=ocnmask)
 
     # restore model longitudes
-    model_lon[model_lon > 360] -= 360
+    longitude[longitude > 360] -= 360
 
     # silicate and phosphate can go slightly negative due to interpolation near zero, set to zero if needed
     if glodap_var in ('PO4', 'silicate'):
         var[var < 0] = 0
 
-    # save with consistent naming (GLODAP uses 'TCO2' and 'TAlk'; we store as 'DIC' and 'TA')
+    # save with consistent naming (GLODAP uses 'TCO2' and 'TAlk'; we store as 'CT' and 'AT')
     if glodap_var == 'TCO2':
-        np.save(data_path + 'GLODAPv2.2016b.MappedProduct/DIC.npy', var)
+        np.save(data_path + 'GLODAPv2.2016b.MappedProduct/CT.npy', var)
     elif glodap_var == 'TAlk':
-        np.save(data_path + 'GLODAPv2.2016b.MappedProduct/TA.npy', var)
+        np.save(data_path + 'GLODAPv2.2016b.MappedProduct/AT.npy', var)
     else:
         np.save(data_path + 'GLODAPv2.2016b.MappedProduct/' + glodap_var + '.npy', var)
 
     print('\tregrid complete in ' + str(round(time.time() - start_time, 3)) + ' s')
 
 
-def regrid_woa(data_path: str, woa_var: str, model_lat: np.ndarray,
-               model_lon: np.ndarray, model_depth: np.ndarray,
+def regrid_woa(data_path: str, woa_var: str, latitude: np.ndarray,
+               longitude: np.ndarray, depth: np.ndarray,
                ocnmask: np.ndarray) -> None:
     """Regrid a World Ocean Atlas 2018 variable to the OCIM grid and save as .npy.
 
@@ -111,11 +111,11 @@ def regrid_woa(data_path: str, woa_var: str, model_lat: np.ndarray,
     woa_var : str
         Variable to regrid. One of: 'S' (salinity), 'T' (temperature),
         'Si' (silicate), 'P' (phosphate).
-    model_lat : np.ndarray
+    latitude : np.ndarray
         1D array of OCIM2-48L latitude values [degrees N].
-    model_lon : np.ndarray
+    longitude : np.ndarray
         1D array of OCIM2-48L longitude values [degrees E, 0-360].
-    model_depth : np.ndarray
+    depth : np.ndarray
         1D array of OCIM2-48L depth values [m].
     ocnmask : np.ndarray
         Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
@@ -157,9 +157,9 @@ def regrid_woa(data_path: str, woa_var: str, model_lat: np.ndarray,
         (data_lat, data_lon, data_depth), var, bounds_error=False, fill_value=None
     )
 
-    lat, lon, depth = np.meshgrid(model_lat, model_lon, model_depth, indexing='ij')
-    query_points = np.array([lat.ravel(), lon.ravel(), depth.ravel()]).T
-    var = interp(query_points).reshape(depth.shape)
+    lat_grid, lon_grid, depth_grid = np.meshgrid(latitude, longitude, depth, indexing='ij')
+    query_points = np.array([lat_grid.ravel(), lon_grid.ravel(), depth_grid.ravel()]).T
+    var = interp(query_points).reshape(depth_grid.shape)
 
     var = inpaint_nans_3d(var, mask=ocnmask)
 
@@ -175,8 +175,8 @@ def regrid_woa(data_path: str, woa_var: str, model_lat: np.ndarray,
     print('\tregrid complete in ' + str(round(time.time() - start_time, 3)) + ' s')
 
 
-def regrid_ncep_noaa(data_path: str, ncep_var: str, model_lat: np.ndarray,
-                     model_lon: np.ndarray, ocnmask: np.ndarray) -> None:
+def regrid_ncep_noaa(data_path: str, ncep_var: str, latitude: np.ndarray,
+                     longitude: np.ndarray, ocnmask: np.ndarray) -> None:
     """Regrid a NCEP/DOE or NOAA SST surface field to the OCIM grid and save as .npy.
 
     Computes the annual mean from the monthly climatology, interpolates to the
@@ -191,9 +191,9 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, model_lat: np.ndarray,
     ncep_var : str
         Variable to regrid. One of: 'icec' (ice concentration), 'wspd' (wind
         speed at 10 m), 'sst' (sea surface temperature).
-    model_lat : np.ndarray
+    latitude : np.ndarray
         1D array of OCIM2-48L latitude values [degrees N].
-    model_lon : np.ndarray
+    longitude : np.ndarray
         1D array of OCIM2-48L longitude values [degrees E].
     ocnmask : np.ndarray
         Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
@@ -222,9 +222,9 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, model_lat: np.ndarray,
         (data_lat, data_lon), var, bounds_error=False, fill_value=None
     )
 
-    lat, lon = np.meshgrid(model_lat, model_lon, indexing='ij')
-    query_points = np.array([lat.ravel(), lon.ravel()]).T
-    var = interp(query_points).reshape(lon.shape)
+    lat_grid, lon_grid = np.meshgrid(latitude, longitude, indexing='ij')
+    query_points = np.array([lat_grid.ravel(), lon_grid.ravel()]).T
+    var = interp(query_points).reshape(lon_grid.shape)
 
     var = inpaint_nans_2d(var, mask=ocnmask[:, :, 0])
 
@@ -238,8 +238,8 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, model_lat: np.ndarray,
     print('\tregrid complete in ' + str(round(time.time() - start_time, 3)) + ' s')
 
 
-def regrid_cobalt(cobalt_vrbl, model_lat: np.ndarray, model_lon: np.ndarray,
-                  model_depth: np.ndarray, ocnmask: np.ndarray,
+def regrid_cobalt(cobalt_vrbl, latitude: np.ndarray, longitude: np.ndarray,
+                  depth: np.ndarray, ocnmask: np.ndarray,
                   data_path: str) -> None:
     """Regrid a COBALT biogeochemistry variable to the OCIM grid and save as .npy.
 
@@ -251,11 +251,11 @@ def regrid_cobalt(cobalt_vrbl, model_lat: np.ndarray, model_lon: np.ndarray,
     ----------
     cobalt_vrbl : xarray.DataArray
         COBALT model variable with dimensions (time, zl, yh, xh).
-    model_lat : np.ndarray
+    latitude : np.ndarray
         1D array of OCIM2-48L latitude values [degrees N].
-    model_lon : np.ndarray
+    longitude : np.ndarray
         1D array of OCIM2-48L longitude values [degrees E, 0-360].
-    model_depth : np.ndarray
+    depth : np.ndarray
         1D array of OCIM2-48L depth values [m].
     ocnmask : np.ndarray
         Integer mask of shape (n_lat, n_lon, n_depth); 1 = ocean, 0 = land.
@@ -286,9 +286,9 @@ def regrid_cobalt(cobalt_vrbl, model_lat: np.ndarray, model_lon: np.ndarray,
         bounds_error=False, fill_value=None
     )
 
-    lat, lon, depth = np.meshgrid(model_lat, model_lon, model_depth, indexing='ij')
-    query_points = np.array([lat.ravel(), lon.ravel(), depth.ravel()]).T
-    var_interped = interp(query_points).reshape(depth.shape)
+    lat_grid, lon_grid, depth_grid = np.meshgrid(latitude, longitude, depth, indexing='ij')
+    query_points = np.array([lat_grid.ravel(), lon_grid.ravel(), depth_grid.ravel()]).T
+    var_interped = interp(query_points).reshape(depth_grid.shape)
 
     var_inpainted = inpaint_nans_3d(var_interped, mask=ocnmask)
 

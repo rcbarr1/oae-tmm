@@ -3,7 +3,7 @@ Exp23: Maximum alkalinity addition targeting preindustrial surface pH.
 
 At each timestep, solves for the AT needed to return every surface cell
 (within the mixed layer) to its preindustrial pH and applies that as the
-CDR flux. NaOH is assumed (no DIC added). Supports multiple time-step
+CDR flux. NaOH is assumed (no CT added). Supports multiple time-step
 resolutions and SSP scenarios.
 
 CLI usage:
@@ -28,18 +28,18 @@ class Exp23(BaseExperiment):
     """Maximum alkalinity addition to restore preindustrial surface pH.
 
     At each timestep after start_CDR, solves for the AT required to return
-    each masked surface cell to preindustrial pH given the current DIC, then
+    each masked surface cell to preindustrial pH given the current CT, then
     applies that as a flux. Cells where AT_desired < AT_current are skipped
-    (no AT removal). No DIC is added (NaOH assumption).
+    (no AT removal). No CT is added (NaOH assumption).
     """
 
     def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
-        """Add AT to restore preindustrial pH at masked cells; no DIC change (NaOH)."""
+        """Add AT to restore preindustrial pH at masked cells; no CT change (NaOH)."""
         q = np.zeros(1 + 2 * self.m)
         co2sys_desired = pyco2.sys(
-            dic=chem['DIC_current'], pH=self.pH_preind,
-            salinity=self.S, temperature=self.T, pressure=self.grid['pressure'],
-            total_silicate=self.Si, total_phosphate=self.P,
+            dic=chem['CT_current'], pH=self.pH_preind,
+            salinity=self.salinity, temperature=self.temperature, pressure=self.grid['pressure'],
+            total_silicate=self.silicate, total_phosphate=self.phosphate,
         )
         AT_desired = co2sys_desired['alkalinity']
         del co2sys_desired
@@ -61,9 +61,13 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     grid    = loaders.load_ocim(data_path)
     ocnmask = grid['ocnmask']
 
-    # mixed-layer mask: 1 where grid cell bottom depth < local MLD
-    grid_cell_depth_3d = make_3d(grid['grid_cell_depth'], ocnmask)
-    mldmask    = (grid_cell_depth_3d < grid['mld'][:, :, None]).astype(int)
+    # mixed-layer mask: 1 where cell bottom depth < local MLD (cells fully within mixed layer)
+    cell_top_depth_3d = make_3d(grid['cell_top_depth'], ocnmask)
+    cell_bottom_depth_3d = np.concatenate(
+        [cell_top_depth_3d[:, :, 1:], np.full((*cell_top_depth_3d.shape[:2], 1), np.inf)],
+        axis=2,
+    )
+    mldmask    = (cell_bottom_depth_3d < grid['mld'][:, :, None]).astype(int)
     q_AT_mask  = flatten(mldmask * ocnmask, ocnmask)
 
     start_year = 2020.0

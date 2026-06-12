@@ -14,10 +14,10 @@ OCIM2-48L array conventions used throughout:
 """
 
 import warnings
+from typing import Optional
 
 import numpy as np
 from scipy.ndimage import convolve
-from tqdm import tqdm
 
 
 def flatten(field_3d: np.ndarray, ocnmask: np.ndarray) -> np.ndarray:
@@ -99,7 +99,7 @@ def get_depth_idx(ocnmask: np.ndarray, depth_level: int) -> np.ndarray:
 
 
 def inpaint_nans_3d(array_3d: np.ndarray, iterations: int = 10,
-                    mask: np.ndarray = None) -> np.ndarray:
+                    mask: Optional[np.ndarray] = None) -> np.ndarray:
     """Fill NaN values in a 3D array by iterative neighbor averaging.
 
     Uses a 6-connected stencil (one neighbor in each of +/-x, +/-y, +/-z) to
@@ -180,7 +180,7 @@ def inpaint_nans_3d(array_3d: np.ndarray, iterations: int = 10,
 
 
 def inpaint_nans_2d(array_2d: np.ndarray, iterations: int = 10,
-                    mask: np.ndarray = None) -> np.ndarray:
+                    mask: Optional[np.ndarray] = None) -> np.ndarray:
     """Fill NaN values in a 2D array by iterative neighbor averaging.
 
     2D analogue of inpaint_nans_3d(), using a 4-connected stencil (+/-x, +/-y).

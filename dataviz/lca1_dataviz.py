@@ -30,10 +30,10 @@ output_path = './outputs/'
 model_data = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')
 ocnmask = model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_numpy()
 
-model_lat   = model_data['tlat'].isel(depth=0, longitude=0).to_numpy()    # ºN
-model_lon   = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()     # ºE
-model_depth = model_data['tz'].isel(longitude=0, latitude=0).to_numpy()   # m below sea surface
-model_vols  = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy() # m^3
+latitude    = model_data['tlat'].isel(depth=0, longitude=0).to_numpy()    # ºN
+longitude   = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()     # ºE
+depth       = model_data['tz'].isel(longitude=0, latitude=0).to_numpy()   # m below sea surface
+cell_volume = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy() # m^3
 
 rho = 1025  # seawater density [kg m-3]
 surf_idx = get_depth_idx(ocnmask, 0)
@@ -84,46 +84,46 @@ mpl.rcParams['font.weight'] = 'bold'
 #%% pull in preindustrial baselines
 
 # get GLODAP data
-DIC_3D = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/DIC.npy') # dissolved inorganic carbon [µmol kg-1]
-AT_3D  = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/TA.npy')   # total alkalinity [µmol kg-1]
-T_3D   = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/temperature.npy') # temperature [ºC]
-S_3D   = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/salinity.npy') # salinity [unitless]
-Si_3D  = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/silicate.npy') # silicate [µmol kg-1]
-P_3D   = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/PO4.npy') # phosphate [µmol kg-1]
+CT_3d          = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/CT.npy')          # dissolved inorganic carbon [µmol kg-1]
+AT_3d          = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/AT.npy')          # total alkalinity [µmol kg-1]
+temperature_3d = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/temperature.npy') # temperature [ºC]
+salinity_3d    = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/salinity.npy')    # salinity [unitless]
+silicate_3d    = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/silicate.npy')    # silicate [µmol kg-1]
+phosphate_3d   = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/phosphate.npy')   # phosphate [µmol kg-1]
 
-S  = flatten(S_3D, ocnmask)
-T  = flatten(T_3D, ocnmask)
-Si = flatten(Si_3D, ocnmask)
-P  = flatten(P_3D, ocnmask)
+salinity    = flatten(salinity_3d,    ocnmask)
+temperature = flatten(temperature_3d, ocnmask)
+silicate    = flatten(silicate_3d,    ocnmask)
+phosphate   = flatten(phosphate_3d,   ocnmask)
 
 # get TRACE data
-Canth_2002_3D = calculate_canth('REMIND', 2002, T_3D, S_3D, ocnmask, model_lat, model_lon, model_depth)
+Canth_2002_3d = calculate_canth('REMIND', 2002, temperature_3d, salinity_3d, ocnmask, latitude, longitude, depth)
 if start_year != 2002:
-    Canth_3D = calculate_canth('REMIND', start_year, T_3D, S_3D, ocnmask, model_lat, model_lon, model_depth)
+    Canth_3d = calculate_canth('REMIND', start_year, temperature_3d, salinity_3d, ocnmask, latitude, longitude, depth)
 else:
-    Canth_3D = Canth_2002_3D
+    Canth_3d = Canth_2002_3d
 
-# calculate preindustrial DIC by subtracting anthropogenic carbon
-DIC_preind_3D = DIC_3D - Canth_2002_3D
-DIC_preind    = flatten(DIC_preind_3D, ocnmask)
+# calculate preindustrial CT by subtracting anthropogenic carbon
+CT_preind_3d = CT_3d - Canth_2002_3d
+CT_preind    = flatten(CT_preind_3d, ocnmask)
 
-DIC_start_3D = DIC_preind_3D + Canth_3D
+CT_start_3d = CT_preind_3d + Canth_3d
 
 # create "pressure" array by broadcasting depth array
-pressure_3D = np.tile(model_depth[:, np.newaxis, np.newaxis], (1, ocnmask.shape[0], ocnmask.shape[1])).transpose([1, 2, 0])
-pressure    = flatten(pressure_3D, ocnmask)
+pressure_3d = np.tile(depth[:, np.newaxis, np.newaxis], (1, ocnmask.shape[0], ocnmask.shape[1])).transpose([1, 2, 0])
+pressure    = flatten(pressure_3d, ocnmask)
 
 # calculate preindustrial pH assuming steady state alkalinity
-co2sys = pyco2.sys(dic=DIC_preind,
-                   alkalinity=flatten(AT_3D, ocnmask),
-                   salinity=flatten(S_3D, ocnmask),
-                   temperature=flatten(T_3D, ocnmask),
-                   pressure=flatten(pressure_3D, ocnmask),
-                   total_silicate=flatten(Si_3D, ocnmask),
-                   total_phosphate=flatten(P_3D, ocnmask))
+co2sys = pyco2.sys(dic=CT_preind,
+                   alkalinity=flatten(AT_3d, ocnmask),
+                   salinity=flatten(salinity_3d, ocnmask),
+                   temperature=flatten(temperature_3d, ocnmask),
+                   pressure=flatten(pressure_3d, ocnmask),
+                   total_silicate=flatten(silicate_3d, ocnmask),
+                   total_phosphate=flatten(phosphate_3d, ocnmask))
 
 pH_preind    = co2sys['pH']
-pH_preind_3D = make_3d(pH_preind, ocnmask)
+pH_preind_3d = make_3d(pH_preind, ocnmask)
 
 #%% calculate anthropogenic carbon at each time step
 Canth_all_scenarios = []
@@ -144,10 +144,10 @@ if interp:
         Canth_all_idx = []
         for idx in tqdm(range(len(t))):
             if scenario != 'none':
-                Canth_idx_3D = interp_trace(data_path, t[idx], scenario, model_lat, model_lon, model_depth, ocnmask)
+                Canth_idx_3d = interp_trace(data_path, t[idx], scenario, latitude, longitude, depth, ocnmask)
             else:
-                Canth_idx_3D = Canth_3D
-            Canth_all_idx.append(flatten(Canth_idx_3D, ocnmask))
+                Canth_idx_3d = Canth_3d
+            Canth_all_idx.append(flatten(Canth_idx_3d, ocnmask))
         Canth_all_scenarios.append(Canth_all_idx)
 
 # without interpolation
@@ -156,10 +156,10 @@ else:
         Canth_all_idx = []
         for idx in tqdm(range(len(t))):
             if scenario != 'none':
-                Canth_idx_3D = calculate_canth(scenario, t[idx], T_3D, S_3D, ocnmask, model_lat, model_lon, model_depth)
+                Canth_idx_3d = calculate_canth(scenario, t[idx], temperature_3d, salinity_3d, ocnmask, latitude, longitude, depth)
             else:
-                Canth_idx_3D = Canth_3D
-            Canth_all_idx.append(flatten(Canth_idx_3D, ocnmask))
+                Canth_idx_3d = Canth_3d
+            Canth_all_idx.append(flatten(Canth_idx_3d, ocnmask))
         Canth_all_scenarios.append(Canth_all_idx)
 
 np.save(output_path + 'Canth_LCA_start2050.npy', Canth_all_scenarios)
@@ -169,7 +169,7 @@ Canth_start2026 = np.load(output_path + 'Canth_LCA_start2026.npy')
 Canth_start2050 = np.load(output_path + 'Canth_LCA_start2050.npy')
 
 #%% calculate eta over time for each location
-# eta = mol C / mol AT = delDIC / delAT
+# eta = mol C / mol AT = delCT / delAT
 
 fig = plt.figure(figsize=(5,5), dpi=200)
 ax = fig.gca()
@@ -181,15 +181,15 @@ for exp_idx in range(len(experiment_names)):
         chunks={'time': 10},
         parallel=True)
 
-    model_vols_xr = broadcast_to_dataset(model_vols, ds)
+    cell_volume_xr = broadcast_to_dataset(cell_volume, ds)
 
-    delAT_mol  = ds['delAT']  * model_vols_xr * rho * 1e-6
-    delDIC_mol = ds['delDIC'] * model_vols_xr * rho * 1e-6
+    delAT_mol  = ds['delAT']  * cell_volume_xr * rho * 1e-6
+    delCT_mol = ds['delCT'] * cell_volume_xr * rho * 1e-6
 
-    delAT_mol_total  = delAT_mol.sum(dim=['lat', 'lon', 'depth'], skipna=True)
-    delDIC_mol_total = delDIC_mol.sum(dim=['lat', 'lon', 'depth'], skipna=True)
+    delAT_mol_total = delAT_mol.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
+    delCT_mol_total = delCT_mol.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
 
-    eta = delDIC_mol_total / delAT_mol_total
+    eta = delCT_mol_total / delAT_mol_total
 
     ax.plot(ds['time'].values - start_years[exp_idx], eta.values, label=labels[exp_idx], c=linecolors[exp_idx], ls=linestyles[exp_idx])
 

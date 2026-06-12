@@ -6,7 +6,7 @@ Replicates the approach of https://www.nature.com/articles/s41558-024-02179-9: a
 lets the system equilibrate. Repeated independently for every surface cell to
 produce a global map.
 
-CDR assumption: NaOH (no DIC change). Mixed time-stepping (daily for 90 days,
+CDR assumption: NaOH (no CT change). Mixed time-stepping (daily for 90 days,
 monthly to year 5, annual to year 15) captures fast air-sea re-equilibration while
 keeping long-tail transport tractable.
 

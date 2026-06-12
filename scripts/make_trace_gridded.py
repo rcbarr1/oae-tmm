@@ -20,13 +20,13 @@ data_path = './data/'
 output_path = './data/TRACE_gridded/'
 
 ocim = load_ocim(data_path)
-ocnmask     = ocim['ocnmask']
-model_lat   = ocim['model_lat']
-model_lon   = ocim['model_lon']
-model_depth = ocim['model_depth']
+ocnmask   = ocim['ocnmask']
+latitude  = ocim['latitude']
+longitude = ocim['longitude']
+depth     = ocim['depth']
 
-T_3D = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/temperature.npy')
-S_3D = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/salinity.npy')
+temperature_3d = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/temperature.npy')
+salinity_3d    = np.load(data_path + 'GLODAPv2.2016b.MappedProduct/salinity.npy')
 
 scenarios = {
     'none': 1, 'ssp119': 2, 'ssp126': 3, 'ssp245': 4, 'ssp370': 5,
@@ -40,19 +40,19 @@ for scenario_name, scenario_idx in scenarios.items():
     canth_time_series = []
 
     for year in tqdm(years):
-        canth_3D = calculate_canth(
-            scenario_name, year, T_3D, S_3D, ocnmask, model_lat, model_lon, model_depth,
+        canth_3d = calculate_canth(
+            scenario_name, year, temperature_3d, salinity_3d, ocnmask, latitude, longitude, depth,
         )
-        canth_time_series.append(canth_3D)
+        canth_time_series.append(canth_3d)
 
     canth_xr = xr.DataArray(
         np.array(canth_time_series),
-        dims=['time', 'lat', 'lon', 'depth'],
+        dims=['time', 'latitude', 'longitude', 'depth'],
         coords={
             'time': years,
-            'lat': model_lat,
-            'lon': model_lon,
-            'depth': model_depth,
+            'latitude': latitude,
+            'longitude': longitude,
+            'depth': depth,
         },
         name='Canth',
     )

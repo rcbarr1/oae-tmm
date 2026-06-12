@@ -2,10 +2,10 @@
 LCA1: AT pulse addition at specific coastal and offshore locations.
 
 Models alkalinity addition of 1 metric ton of OH- at each of four locations:
-  - nearshore Colombia  (3.96°N, 281.0°E)  — model_lat[47], model_lon[140]
-  - offshore Colombia   (5.93°N, 269.0°E)  — model_lat[48], model_lon[134]
-  - nearshore Norway   (61.32°N,   3.0°E)  — model_lat[76], model_lon[1]
-  - offshore Norway    (63.30°N, 349.0°E)  — model_lat[77], model_lon[174]
+  - nearshore Colombia  (3.96°N, 281.0°E)  — latitude[47], longitude[140]
+  - offshore Colombia   (5.93°N, 269.0°E)  — latitude[48], longitude[134]
+  - nearshore Norway   (61.32°N,   3.0°E)  — latitude[76], longitude[1]
+  - offshore Norway    (63.30°N, 349.0°E)  — latitude[77], longitude[174]
 
 AT is added as a single pulse during the first month of the simulation, then
 the system runs forward for 16 years to track the fate of the alkalinity signal.
@@ -49,19 +49,19 @@ class LCA1(BaseExperiment):
     """
 
     def setup(self):
-        """Load T_3D and S_3D for pyTRACE, then delegate to BaseExperiment.setup()."""
+        """Load temperature_3d and salinity_3d for pyTRACE, then delegate to BaseExperiment.setup()."""
         base = self.cfg.data_path + 'GLODAPv2.2016b.MappedProduct/'
-        self.T_3D = np.load(base + 'temperature.npy')
-        self.S_3D = np.load(base + 'salinity.npy')
+        self.temperature_3d = np.load(base + 'temperature.npy')
+        self.salinity_3d = np.load(base + 'salinity.npy')
         super().setup()
 
     def _calc_canth(self, year: float, scenario: str) -> np.ndarray:
         """Compute Canth by calling pyTRACE directly (required for REMIND scenario)."""
         return trace.calculate_canth(
-            scenario, year, self.T_3D, self.S_3D,
+            scenario, year, self.temperature_3d, self.salinity_3d,
             self.grid['ocnmask'],
-            self.grid['model_lat'], self.grid['model_lon'],
-            self.grid['model_depth'],
+            self.grid['latitude'], self.grid['longitude'],
+            self.grid['depth'],
         )
 
     def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
@@ -76,7 +76,7 @@ class LCA1(BaseExperiment):
         t_elapsed = t_current - self.cfg.start_CDR
         if t_elapsed < 0.0834:
             AT_amount_tons = self.cfg.attrs['AT_amount_tons']
-            V       = self.grid['model_vols']   # (m,) flattened volumes [m^3]
+            V       = self.grid['cell_volume']   # (m,) flattened volumes [m^3]
             rho     = self.grid['rho']
             sw_mass = np.sum(V * self.cfg.q_AT_mask) * rho  # [kg] seawater at target cell
             # metric tons → µmol → normalize by sw_mass → annualize (×12 for monthly flux)
