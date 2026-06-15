@@ -31,7 +31,7 @@ pip install --no-deps git+https://github.com/mvdh7/PyCO2SYS@v2.0.0-b5
 pyTRACE is vendored in the repository. Check `https://github.com/d-sandborn/TRACE` for a newer version before installing.
 
 ```bash
-pip install --no-deps pyTRACE/
+pip install --no-deps -e pyTRACE/ --config-settings editable-mode=compat
 ```
 
 ### 5. Install the oae-tmm package
@@ -43,7 +43,7 @@ pip install -e .
 ## Running experiments
 
 ```bash
-python -m experiments.exp24 --test   # dry run
+python -m experiments.exp24 --test   # test run
 python -m experiments.exp24          # full run
 ```
 

@@ -28,6 +28,8 @@ Usage:
     python tests/invariant_test.py
 """
 #%%
+import sys
+
 import numpy as np
 from scipy import sparse
 

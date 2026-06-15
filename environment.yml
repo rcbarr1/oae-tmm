@@ -28,5 +28,5 @@ dependencies:
       # PyCO2SYS must be installed manually to avoid overwriting conda-managed deps:
       # pip install --no-deps git+https://github.com/mvdh7/PyCO2SYS@v2.0.0-b5
       # pyTRACE is vendored in the repo and must be installed manually:
-      # pip install --no-deps pyTRACE/
+      # pip install --no-deps -e pyTRACE/ --config-settings editable-mode=compat
       # Note: upstream has been renamed -- check https://github.com/d-sandborn/TRACE for updates

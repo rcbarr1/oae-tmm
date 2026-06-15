@@ -10,6 +10,7 @@ Usage:
     data_path defaults to './data/' if not provided.
 """
 import os
+import sys
 
 import numpy as np
 import xarray as xr
