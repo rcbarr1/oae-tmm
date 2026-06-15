@@ -217,6 +217,49 @@ def test_inpaint_nans_3d():
     passed &= _check(not np.any(np.isnan(result4)),
                      'multiple isolated NaN cells all filled when surrounded by valid neighbors')
 
+    # Land-contamination fix: a NaN ocean cell flanked by land on 3 sides and two valid
+    # ocean neighbors (100.0 and 0.0) should fill to their mean (50.0), not be pulled
+    # toward the global mean of the ocean cells (~25.0).
+    arr5 = np.full((5, 5, 1), np.nan)
+    arr5[0, 1, 0] = 100.0
+    arr5[2, 1, 0] = 0.0
+    arr5[3, 1, 0] = 0.0
+    arr5[4, 1, 0] = 0.0
+    ocean_mask5 = np.zeros((5, 5, 1), dtype=int)
+    ocean_mask5[:, 1, 0] = 1   # single column of ocean; all other cells are land
+    result5 = inpaint_nans_3d(arr5, iterations=5, mask=ocean_mask5)
+    # [1,1,0] has valid ocean neighbors [0,1,0]=100 and [2,1,0]=0; land on 3 sides
+    passed &= _check(np.isclose(result5[1, 1, 0], 50.0, atol=1e-3),
+                     f'land-contamination: fills to ocean-neighbor mean (50.0), got {result5[1,1,0]:.4f}')
+
+    # Global-mean pre-fill fix: a NaN patch surrounded by low values (100.0) in an ocean
+    # with a high global mean (~2000.0) should fill toward the boundary value, not the mean.
+    arr6 = np.full((10, 10, 1), 2000.0)
+    arr6[3:7, 3:7, 0] = np.nan
+    arr6[2, 3:7, 0] = 100.0   # boundary: top
+    arr6[7, 3:7, 0] = 100.0   # boundary: bottom
+    arr6[3:7, 2, 0] = 100.0   # boundary: left
+    arr6[3:7, 7, 0] = 100.0   # boundary: right
+    result6 = inpaint_nans_3d(arr6)
+    passed &= _check(not np.any(np.isnan(result6[3:7, 3:7, 0])),
+                     'local-min: all NaN cells in patch filled')
+    passed &= _check(np.all(np.abs(result6[3:7, 3:7, 0] - 100.0) < 1.0),
+                     f'local-min: patch fills toward boundary value (100.0), not global mean (~2000.0); '
+                     f'max deviation: {np.max(np.abs(result6[3:7, 3:7, 0] - 100.0)):.4f}')
+
+    # Convergence: a 20-cell chain fills completely from one end via convergence check.
+    chain_len = 20
+    arr7 = np.full((chain_len, 3, 1), np.nan)
+    arr7[0, 1, 0] = 50.0
+    ocean_mask7 = np.zeros((chain_len, 3, 1), dtype=int)
+    ocean_mask7[:, 1, 0] = 1
+    result7 = inpaint_nans_3d(arr7, mask=ocean_mask7)
+    passed &= _check(not np.any(np.isnan(result7[:, 1, 0])),
+                     f'large-gap: all {chain_len} cells in chain filled by convergence')
+    passed &= _check(np.allclose(result7[:, 1, 0], 50.0),
+                     f'large-gap: all filled cells equal 50.0; '
+                     f'max deviation: {np.max(np.abs(result7[:, 1, 0] - 50.0)):.6f}')
+
     return passed
 
 
@@ -402,23 +445,22 @@ def test_inpaint_edge_cases():
     passed &= _check(any(issubclass(x.category, UserWarning) for x in w3),
                      'all-NaN 3D input: UserWarning raised')
 
-    # iterations=0: emits UserWarning; NaN cells replaced by global mean; valid cells unchanged.
+    # iterations=0: emits UserWarning; NaN cells remain NaN; valid cells unchanged.
     arr = np.array([[1., 2., np.nan],
                     [4., np.nan, 6.],
                     [np.nan, 8., 9.]])
-    global_mean = np.nanmean(arr)   # (1+2+4+6+8+9)/6 = 5.0
     with warnings.catch_warnings(record=True) as w0:
         warnings.simplefilter('always')
         result0 = inpaint_nans_2d(arr.copy(), iterations=0)
     passed &= _check(any(issubclass(x.category, UserWarning) for x in w0),
                      'iterations=0 2D: UserWarning raised')
-    passed &= _check(np.isclose(result0[0, 2], global_mean),
-                     f'iterations=0: NaN replaced by global mean ({global_mean}): got {result0[0,2]:.4f}')
+    passed &= _check(np.isnan(result0[0, 2]) and np.isnan(result0[1, 1]) and np.isnan(result0[2, 0]),
+                     'iterations=0: NaN cells remain NaN')
     passed &= _check(result0[0, 0] == 1.0 and result0[2, 2] == 9.0,
                      'iterations=0: valid cells unchanged')
 
-    # Single valid cell in a 2D field: all NaNs initialised to that cell's value,
-    # so the result is uniformly that value after any number of iterations.
+    # Single valid cell in a 2D field: fill propagates outward from the single valid
+    # cell; all NaNs reach 10.0 after enough iterations.
     arr_single = np.full((5, 5), np.nan)
     arr_single[2, 2] = 10.0
     result_single = inpaint_nans_2d(arr_single, iterations=20)

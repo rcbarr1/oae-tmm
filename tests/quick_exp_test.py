@@ -42,7 +42,7 @@ test_files = ['exp22_2026-06-12_test_ssp126_000.nc',
               'LCA1_2026-06-12_nearshore_colombia_1ton_2050_000.nc',
               'LCA1_TEST_000.nc'] # before refactor
 
-filepath  = './outputs/' + test_files[11]
+filepath  = './outputs/' + test_files[2]
 data_path = './data/'
 
 # ── helpers ───────────────────────────────────────────────────────────────────

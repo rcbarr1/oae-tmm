@@ -98,15 +98,15 @@ def get_depth_idx(ocnmask: np.ndarray, depth_level: int) -> np.ndarray:
     return np.argwhere(flatten(ocn_depth_mask, ocnmask) == 1)
 
 
-def inpaint_nans_3d(array_3d: np.ndarray, iterations: int = 10,
+def inpaint_nans_3d(array_3d: np.ndarray, iterations: int = 200,
                     mask: Optional[np.ndarray] = None) -> np.ndarray:
     """Fill NaN values in a 3D array by iterative neighbor averaging.
 
     Uses a 6-connected stencil (one neighbor in each of +/-x, +/-y, +/-z) to
     iteratively replace NaN cells with the mean of their valid neighbors.
-    NaNs are initialized to the global array mean before the first iteration
-    so every cell has a starting value. If a land mask is provided, land cells
-    are excluded from the fill and restored to NaN at the end.
+    Land cells remain NaN throughout and never contribute to neighbor averages.
+    Stops early once all ocean NaN cells are filled or after `iterations`
+    iterations, whichever comes first.
 
     This approach is used instead of scipy's interpolation because the OCIM
     grid is irregular (ocean-only), and simple iterative averaging avoids
@@ -117,8 +117,8 @@ def inpaint_nans_3d(array_3d: np.ndarray, iterations: int = 10,
     array_3d : np.ndarray
         3D array of shape (n_lat, n_lon, n_depth) with NaN values to fill.
     iterations : int, optional
-        Number of averaging iterations. More iterations propagates fill values
-        further from valid data. Default is 10.
+        Maximum number of averaging iterations; stops early if all ocean NaN
+        cells are filled. Default is 200.
     mask : np.ndarray, optional
         Boolean or integer array of shape (n_lat, n_lon, n_depth); True/1 =
         ocean cell that can receive a fill value. Land cells (False/0) remain
@@ -131,8 +131,8 @@ def inpaint_nans_3d(array_3d: np.ndarray, iterations: int = 10,
     """
     if iterations == 0:
         warnings.warn(
-            'inpaint_nans_3d called with iterations=0: NaN cells will be replaced by the '
-            'global array mean but no neighbour averaging will occur.',
+            'inpaint_nans_3d called with iterations=0: no neighbour averaging will occur '
+            'and NaN cells will remain NaN.',
             UserWarning, stacklevel=2,
         )
     if np.all(np.isnan(array_3d)):
@@ -144,42 +144,40 @@ def inpaint_nans_3d(array_3d: np.ndarray, iterations: int = 10,
 
     interpolated = array_3d.copy()
 
+    if mask is not None:
+        land_mask = ~(mask > 0)  # True where land (accepts 0/1 integer or bool)
+        interpolated[land_mask] = np.nan  # land stays NaN throughout; never a valid source
+    else:
+        land_mask = np.zeros_like(array_3d, dtype=bool)
+
     # 6-connected stencil: one neighbor in each axis direction, no diagonals
     kernel = np.zeros((3, 3, 3))
     kernel[1, 1, 0] = kernel[1, 1, 2] = 1  # +/-depth
     kernel[1, 0, 1] = kernel[1, 2, 1] = 1  # +/-lat
     kernel[0, 1, 1] = kernel[2, 1, 1] = 1  # +/-lon
 
-    nan_mask = np.isnan(interpolated)
-    interpolated[nan_mask] = np.nanmean(interpolated)  # initialize NaNs to global mean
-
-    # optional land mask to persist NaNs in land areas
-    if mask is not None:
-        land_mask = ~(mask > 0)  # True where land (accepts 0/1 integer or bool)
-    else:
-        land_mask = np.zeros_like(array_3d, dtype=bool)
+    nan_mask = np.isnan(interpolated)  # track which ocean cells still need filling
 
     for _ in range(iterations):
-        # count valid neighbors
         valid = ~np.isnan(interpolated)
         neighbor_sum = convolve(np.nan_to_num(interpolated), kernel, mode='wrap')
         neighbor_count = convolve(valid.astype(float), kernel, mode='wrap')
 
-        # avoid division by 0
         with np.errstate(invalid='ignore', divide='ignore'):
             new_vals = neighbor_sum / neighbor_count
 
-        # only update cells that were originally NaN, are ocean, and have at least one valid neighbor
         update_mask = nan_mask & ~land_mask & (neighbor_count > 0)
         interpolated[update_mask] = new_vals[update_mask]
 
-    if mask is not None:
-        interpolated[land_mask] = np.nan  # restore land to NaN
+        nan_mask = np.isnan(interpolated)
+        nan_mask[land_mask] = False  # don't count land as remaining work
+        if not np.any(nan_mask):
+            break
 
     return interpolated
 
 
-def inpaint_nans_2d(array_2d: np.ndarray, iterations: int = 10,
+def inpaint_nans_2d(array_2d: np.ndarray, iterations: int = 200,
                     mask: Optional[np.ndarray] = None) -> np.ndarray:
     """Fill NaN values in a 2D array by iterative neighbor averaging.
 
@@ -191,7 +189,7 @@ def inpaint_nans_2d(array_2d: np.ndarray, iterations: int = 10,
     array_2d : np.ndarray
         2D array of shape (n_lat, n_lon) with NaN values to fill.
     iterations : int, optional
-        Number of averaging iterations. Default is 10.
+        Maximum number of averaging iterations. Default is 200.
     mask : np.ndarray, optional
         Boolean or integer array of shape (n_lat, n_lon); True/1 = ocean cell
         that can receive a fill value.

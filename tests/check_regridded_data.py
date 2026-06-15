@@ -38,7 +38,12 @@ def _print_stats(label, arr, lats=None):
 
 
 def _surface_panel(ax, lons, lats, data, title, cmap='RdYlBu_r', vmin=None, vmax=None,
-                   xlim=(0, 360)):
+                   xlim=(0, 360), wrap_lon=None):
+    if wrap_lon is not None:
+        wrap_mask = lons <= wrap_lon
+        lons = np.concatenate([lons, lons[wrap_mask] + 360])
+        data = np.concatenate([data, data[:, wrap_mask]], axis=1)
+        xlim = (xlim[0], 360 + wrap_lon)
     masked = np.ma.masked_invalid(data)
     if vmin is None: vmin = float(np.nanpercentile(data, 2))
     if vmax is None: vmax = float(np.nanpercentile(data, 98))
@@ -87,7 +92,7 @@ for raw_var, raw_suffix, reg_var, label, vmin, vmax, cmap in _GLODAP_VARS:
                     vmin=vmin, vmax=vmax, cmap=cmap, xlim=(20, 380))
     _surface_panel(axes[1], longitude, latitude, reg_surf,
                     f'Regridded ({reg_var}, OCIM2-48L)',
-                    vmin=vmin, vmax=vmax, cmap=cmap)
+                    vmin=vmin, vmax=vmax, cmap=cmap, wrap_lon=50)
     plt.tight_layout()
 
 plt.show()
@@ -137,7 +142,7 @@ for var_key, raw_rel, reg_rel, var_name, label, vmin, vmax, cmap, use_cftime, ts
     _surface_panel(axes[0], raw_lon, raw_lat, raw_data,
                     'Original (native grid)', vmin=vmin, vmax=vmax, cmap=cmap)
     _surface_panel(axes[1], longitude, latitude, reg_data,
-                    'Regridded (OCIM2-48L)', vmin=vmin, vmax=vmax, cmap=cmap)
+                    'Regridded (OCIM2-48L)', vmin=vmin, vmax=vmax, cmap=cmap, wrap_lon=50)
     plt.tight_layout()
 
 plt.show()
@@ -207,7 +212,7 @@ fig.suptitle(f'TRACE Canth at {year}, {scenario} — original vs interp_trace (s
 _surface_panel(axes[0], raw_lon, raw_lat, raw_canth[:, :, 0],
                 'Original (native grid)', vmin=vmin, vmax=vmax, cmap='plasma', xlim=(0, 380))
 _surface_panel(axes[1], longitude, latitude, canth_regrid[:, :, 0],
-                'interp_trace output (OCIM2-48L)', vmin=vmin, vmax=vmax, cmap='plasma')
+                'interp_trace output (OCIM2-48L)', vmin=vmin, vmax=vmax, cmap='plasma', wrap_lon=50)
 plt.tight_layout()
 
 # Depth section
