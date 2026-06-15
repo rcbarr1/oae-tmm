@@ -9,8 +9,6 @@ Use this as a before/after baseline when modifying regrid functions.
 """
 #%%
 import os
-import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 import xarray as xr

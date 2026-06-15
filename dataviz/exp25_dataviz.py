@@ -12,9 +12,6 @@ DATA VIZ FOR EXP25: Attempting to replicate map from Yamamoto et al., 2024
 @author: Reese C. Barrett
 """
 #%%
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dataviz.dataviz import plot_surface2d, broadcast_to_dataset
 import xarray as xr
 import numpy as np

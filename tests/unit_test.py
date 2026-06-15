@@ -24,7 +24,6 @@ import os
 import sys
 import tempfile
 import warnings
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 from scipy import sparse

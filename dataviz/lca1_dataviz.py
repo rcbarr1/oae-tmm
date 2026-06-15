@@ -8,9 +8,6 @@ DATA VIZ FOR LCA1: Adding AT to four zones to get efficiency
 @author: Reese C. Barrett
 """
 #%%
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from oae_tmm.grid import flatten, make_3d, get_depth_idx
 from oae_tmm.trace import calculate_canth, interp_trace
 from dataviz.dataviz import get_co2_scenario, plot_surface2d, plot_surface3d, broadcast_to_dataset, make_surf_animation

@@ -6,9 +6,6 @@ DATA VIZ FOR EXP26: monte carlo simulation testing air-sea gas exchange paramete
 @author: Reese C. Barrett
 """
 #%%
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dataviz.dataviz import broadcast_to_dataset
 import xarray as xr
 import numpy as np

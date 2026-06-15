@@ -10,9 +10,6 @@ DATA VIZ FOR EXP22 / EXP23: Maximum alkalinity calculation
 @author: Reese C. Barrett
 """
 #%%
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from oae_tmm.grid import flatten, make_3d, get_depth_idx
 from oae_tmm.trace import calculate_canth, interp_trace
 from dataviz.dataviz import get_co2_scenario, plot_surface2d, plot_surface3d, make_surf_animation, broadcast_to_dataset
