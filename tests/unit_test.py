@@ -34,7 +34,7 @@ from oae_tmm.grid import flatten, make_3d, get_depth_idx, inpaint_nans_2d, inpai
 from oae_tmm.chemistry import schmidt_number, calc_piston_velocity
 from oae_tmm.transport import build_A_matrix
 from oae_tmm.output import open_simulation_output, write_simulation_step
-from experiments.base import BaseExperiment, ExperimentConfig
+from experiments.base import BaseExperiment, ExperimentConfig, rho, Patm, Ma
 
 
 def _pass(msg): print(f'  PASS  {msg}')
@@ -383,13 +383,13 @@ def test_build_A_matrix():
     # --- Shape and CSR format ---
     k = rng.random(m) * 5.0
     f_ice = rng.random(m) * 0.3
-    A = build_A_matrix(TR, k, f_ice, V, R_C, R_A, CT, AT, aqueous_CO2, K0, z1)
+    A = build_A_matrix(TR, k, f_ice, V, R_C, R_A, CT, AT, aqueous_CO2, K0, z1, rho, Patm, Ma)
     passed &= _check(A.shape == (2*m + 1, 2*m + 1),
                      f'A shape: expected ({2*m+1},{2*m+1}), got {A.shape}')
     passed &= _check(A.format == 'csr', f'A format: expected csr, got {A.format!r}')
 
     # --- k=0 → air-sea exchange vanishes; only TR remains in diagonal blocks ---
-    A0 = build_A_matrix(TR, np.zeros(m), np.zeros(m), V, R_C, R_A, CT, AT, aqueous_CO2, K0, z1)
+    A0 = build_A_matrix(TR, np.zeros(m), np.zeros(m), V, R_C, R_A, CT, AT, aqueous_CO2, K0, z1, rho, Patm, Ma)
     Ad = A0.toarray()
 
     # Row 0 (∆xCO2 equation) should be all zeros (no air-sea flux)
@@ -609,14 +609,14 @@ def test_output_path():
     passed = True
 
     class _StubExperiment(BaseExperiment):
-        def make_q(self, t_current, chem, dt):
+        def make_q(self, time_current, chem, dt):
             return np.zeros(1)
 
     def _exp(output_path, max_steps=0):
         cfg = ExperimentConfig(
             data_path='./data/', output_path=output_path,
-            scenario='ssp245', start_year=2020.0,
-            times=np.array([0., 1.]), max_steps_per_file=max_steps,
+            scenario='ssp245',
+            time=np.array([2020.0, 2021.0]), max_steps_per_file=max_steps,
         )
         return _StubExperiment(cfg)
 

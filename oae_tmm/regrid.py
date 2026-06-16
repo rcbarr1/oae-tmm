@@ -10,7 +10,6 @@ Data sources:
   - GLODAPv2.2016b: https://glodap.info/index.php/mapped-data-product/
   - NCEP/DOE Reanalysis II: https://psl.noaa.gov/data/gridded/data.ncep.reanalysis2.html
   - NOAA ERSSTv5: https://psl.noaa.gov/data/gridded/data.noaa.ersst.v5.html
-  - COBALT: GFDL ocean biogeochemistry model output
 """
 
 import time
@@ -112,7 +111,7 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, latitude: np.ndarray,
         Path to the data directory (must contain NCEP_DOE_Reanalysis_II/ and
         NOAA_Extended_Reconstruction_SST_V5/).
     ncep_var : str
-        Variable to regrid. One of: 'icec' (ice concentration), 'wspd' (wind
+        Variable to regrid. One of: 'icec' (ice fraction), 'wspd' (wind
         speed at 10 m), 'sst' (sea surface temperature).
     latitude : np.ndarray
         1D array of OCIM2-48L latitude values [degrees N].

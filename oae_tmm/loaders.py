@@ -95,7 +95,6 @@ def load_ocim(data_path: str) -> dict:
         mld         : np.ndarray (n_lat, n_lon), annual mean mixed layer depth [m]
         z1          : float, thickness of the surface model layer [m]
         surf_idx    : np.ndarray (n_surface_cells, 1), flat indices of surface ocean cells
-        rho         : float, reference seawater density [kg m^-3]
     """
     # transport matrix (Holzer et al. 2021)
     mat = load_mat(data_path + 'OCIM2_48L_base/OCIM2_48L_base_transport.mat')
@@ -119,7 +118,6 @@ def load_ocim(data_path: str) -> dict:
     mldmask = ((cell_bottom_depth_3d < mld[:, :, None]) * ocnmask).astype(int)
 
     surf_idx = get_depth_idx(ocnmask, 0)  # indices of surface grid cells in flattened ocean vector
-    rho = 1025  # reference seawater density [kg m^-3]
 
     # pressure [dbar ≈ m]: broadcast depth to 3D, then flatten
     depth_3d = np.broadcast_to(depth[np.newaxis, np.newaxis, :], ocnmask.shape)
@@ -137,7 +135,6 @@ def load_ocim(data_path: str) -> dict:
         'mld':         mld,
         'z1':          z1,
         'surf_idx':    surf_idx,
-        'rho':         rho,
     }
 
 

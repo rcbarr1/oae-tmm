@@ -19,7 +19,7 @@ CLI usage:
 import numpy as np
 from datetime import datetime
 
-from experiments.base import BaseExperiment, ExperimentConfig, run_cli
+from experiments.base import BaseExperiment, ExperimentConfig, run_cli, rho
 from oae_tmm import loaders
 from oae_tmm.grid import flatten
 
@@ -48,17 +48,17 @@ class Exp24(BaseExperiment):
             self._q_AT_mask = flatten(mask_3d, ocnmask)
         return self._q_AT_mask
 
-    def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
+    def make_q(self, time_current: float, chem: dict, dt: float) -> np.ndarray:
         q = np.zeros(1 + 2 * self.m)
-        t_offset = t_current - self.cfg.start_year
-        rate = 10 * 1e6 / self.grid['z1'] / self.grid['rho']  # [µmol AT kg-1 yr-1]
+        time_offset = time_current - self.cfg.time[0]
+        rate = 10 * 1e6 / self.grid['z1'] / rho  # [µmol AT kg-1 yr-1]
         q_AT_mask = self._get_q_AT_mask()
 
-        if abs(dt - 1) < 0.01 and t_offset <= 1:               # annual step, first year
+        if abs(dt - 1) < 0.01 and time_offset <= 1:               # annual step, first year
             q[(self.m + 1):] = q_AT_mask * rate / 12
-        elif 0.5/12 < dt < 1.5/12 and t_offset <= 31/360:      # monthly step, first month
+        elif 0.5/12 < dt < 1.5/12 and time_offset <= 31/360:      # monthly step, first month
             q[(self.m + 1):] = q_AT_mask * rate
-        elif 0.5/360 < dt < 1.5/360 and t_offset <= 30.5/360:  # daily step, first ~30 days
+        elif 0.5/360 < dt < 1.5/360 and time_offset <= 30.5/360:  # daily step, first ~30 days
             q[(self.m + 1):] = q_AT_mask * rate
         return q
 
@@ -78,22 +78,19 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     ocn_idxs = np.argwhere(surf_mask == 1)  # shape (n_surface_cells, 3)
 
     # mixed time-step schedule
-    t0 = np.arange(0, 0.25, 1/360)   # daily for first 90 days
-    t1 = np.arange(0.25, 5,  1/12)   # monthly until year 5
-    t2 = np.arange(5,   16,  1)       # annual until year 15
-    mixed_times = np.concatenate((t0, t1, t2))
-
-    start_year = 2002
-    start_CDR  = 2002
+    t0 = np.arange(2002, 2002.25, 1/360)   # daily, 2002–2002.25 (first 90 days)
+    t1 = np.arange(2002.25, 2007,  1/12)   # monthly, 2002.25–2007
+    t2 = np.arange(2007,   2018,   1)      # annual, 2007–2018
+    mixed_time = np.concatenate((t0, t1, t2))
 
     if test:
         cells   = [ocn_idxs[0]]
         indices = [0]
-        times   = np.arange(0, 6, 1.0)
+        time = np.arange(2002, 2008, 1.0)
     else:
         cells   = ocn_idxs
         indices = range(len(ocn_idxs))
-        times   = mixed_times
+        time = mixed_time
 
     tag_date = datetime.now().strftime('%Y-%m-%d')
     experiments = []
@@ -104,10 +101,9 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
             data_path          = data_path,
             output_path        = output_path + f'exp24_{tag}.nc',
             scenario           = 'none',
-            start_year         = start_year,
-            times              = times,
+            time               = time,
             max_steps_per_file = 2000,
-            start_CDR          = start_CDR,
+            start_CDR          = 2002,
             attrs              = {
                 'experiment':   'exp24',
                 'tag':          tag,

@@ -14,9 +14,9 @@ Provides two public functions:
 
 Governing equations encoded in A (units in brackets):
 
-    1. d(∆xCO2)/dt = ∆q_sea-air,xCO2                              [µmol CO2 (µmol air)^-1 yr^-1] (same as [µatm CO2 (µatm air)^-1 yr^-1])
+    1. d(∆xCO2)/dt = ∆q_sea-air,xCO2                              [µmol CO2 (µmol air)^-1 yr^-1] (assumed equivalent to [µatm CO2 (µatm air)^-1 yr^-1])
     2. d(∆CT)/dt   = TR * ∆CT + ∆q_air-sea,CT + ∆q_CDR,CT         [µmol CT (kg seawater)^-1 yr^-1]
-    3. d(∆AT)/dt   = TR * ∆AT  + ∆q_CDR,AT                        [µmol AT (kg seawater)^-1 yr^-1]
+    3. d(∆AT)/dt   = TR * ∆AT + ∆q_CDR,AT                         [µmol AT (kg seawater)^-1 yr^-1]
 
 Air-sea fluxes depend on ∆c (not on external forcing), so they fold into A
 rather than the source vector q:
@@ -56,9 +56,9 @@ def build_A_matrix(
     aqueous_CO2: np.ndarray,
     K0: np.ndarray,
     z1: float,
-    rho: float = 1025.0,
-    Patm: float = 1e6,
-    Ma: float = 1.8e26,
+    rho: float,
+    Patm: float,
+    Ma: float,
 ) -> sparse.csr_matrix:
     """Assemble the 2m+1 × 2m+1 sparse block matrix A.
 
@@ -107,12 +107,12 @@ def build_A_matrix(
         CO2 solubility [µmol CO2 m^-3 (µatm CO2)^-1], shape (m,).
     z1 : float
         Depth of the first model layer [m].
-    rho : float, optional
-        Seawater density [kg m^-3]. Default 1025.
-    Patm : float, optional
-        Atmospheric pressure [µatm]. Default 1e6.
-    Ma : float, optional
-        Micromoles of air in the atmosphere [µmol air]. Default 1.8e26.
+    rho : float
+        Seawater density [kg m^-3].
+    Patm : float
+        Atmospheric pressure [µatm].
+    Ma : float
+        Micromoles of air in the atmosphere [µmol air].
 
     Returns
     -------

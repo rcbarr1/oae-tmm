@@ -45,10 +45,10 @@ class Exp25(BaseExperiment):
             self._q_CT_mask = flatten(mask_3d, ocnmask)
         return self._q_CT_mask
 
-    def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
+    def make_q(self, time_current: float, chem: dict, dt: float) -> np.ndarray:
         q = np.zeros(1 + 2 * self.m)
-        t_offset = t_current - self.cfg.start_year
-        if t_offset < 30.5 / 360:
+        time_offset = time_current - self.cfg.time[0]
+        if time_offset < 30.5 / 360:
             q[1:(self.m + 1)] = self._get_q_CT_mask() * -1  # [µmol CT kg-1 yr-1]
         return q
 
@@ -63,24 +63,21 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     ocn_idxs = np.argwhere(surf_mask == 1)
 
     # mixed time-step schedule matching Yamamoto et al., 2024
-    t0 = np.arange(0, 0.25,  1/360)  # daily for first 90 days
-    t1 = np.arange(0.25, 5,  1/12)   # monthly until year 5
-    t2 = np.arange(5,   101, 1)       # annual until year 100
-    mixed_times = np.concatenate((t0, t1, t2))
-
-    start_year = 2002
-    start_CDR  = 2002
+    t0 = np.arange(2002, 2002.25,  1/360)  # daily, 2002–2002.25 (first 90 days)
+    t1 = np.arange(2002.25, 2007,  1/12)   # monthly, 2002.25–2007
+    t2 = np.arange(2007,   2103,   1)      # annual, 2007–2103
+    mixed_time = np.concatenate((t0, t1, t2))
 
     if test:
         cells   = [ocn_idxs[0]]
         indices = [0]
-        t0 = np.arange(0, 0.25, 1/360)  # daily for 90 days (covers 30-day CDR window)
-        t1 = np.arange(0.25, 1, 1/12)   # monthly for the rest of year 1
-        times = np.concatenate((t0, t1))
+        t0 = np.arange(2002, 2002.25, 1/360)  # daily, 2002–2002.25 (covers 30-day CDR window)
+        t1 = np.arange(2002.25, 2003, 1/12)   # monthly, 2002.25–2003
+        time = np.concatenate((t0, t1))
     else:
         cells   = ocn_idxs
         indices = range(len(ocn_idxs))
-        times   = mixed_times
+        time = mixed_time
 
     tag_date = datetime.now().strftime('%Y-%m-%d')
     experiments = []
@@ -91,10 +88,9 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
             data_path          = data_path,
             output_path        = output_path + f'exp25_{tag}.nc',
             scenario           = 'none',
-            start_year         = start_year,
-            times              = times,
+            time               = time,
             max_steps_per_file = 2000,
-            start_CDR          = start_CDR,
+            start_CDR          = 2002,
             attrs              = {
                 'experiment':   'exp25',
                 'tag':          tag,

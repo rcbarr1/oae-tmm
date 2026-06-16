@@ -34,6 +34,7 @@ import numpy as np
 from scipy import sparse
 
 from oae_tmm.transport import build_A_matrix, solve_timestep
+from experiments.base import rho, Patm, Ma
 
 
 def _pass(msg): print(f'  PASS  {msg}')
@@ -85,8 +86,8 @@ dt      = 1 / 12   # one month [yr]
 N_steps = 10
 
 # Build A matrices once (frozen chemistry — constant for all tests)
-A_k0 = build_A_matrix(TR, np.zeros(m), f_ice, V, R_C, R_A, CT, AT, aqueous_CO2, K0, z1)
-A    = build_A_matrix(TR, k,           f_ice, V, R_C, R_A, CT, AT, aqueous_CO2, K0, z1)
+A_k0 = build_A_matrix(TR, np.zeros(m), f_ice, V, R_C, R_A, CT, AT, aqueous_CO2, K0, z1, rho, Patm, Ma)
+A    = build_A_matrix(TR, k,           f_ice, V, R_C, R_A, CT, AT, aqueous_CO2, K0, z1, rho, Patm, Ma)
 
 
 def _run(A_mat, q, n=N_steps):

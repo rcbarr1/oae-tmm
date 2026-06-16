@@ -41,7 +41,7 @@ class Exp26(BaseExperiment):
         assert attrs is not None
         self.k = self.k * attrs['k_scale_factor']
 
-    def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
+    def make_q(self, time_current: float, chem: dict, dt: float) -> np.ndarray:
         q = np.zeros(1 + 2 * self.m)
         if not self._at_pulse_done:
             q_AT_mask = self.cfg.q_AT_mask
@@ -65,15 +65,14 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     surf_mask[:, :, 1:] = 0
     q_AT_mask = flatten(surf_mask, ocnmask)
 
-    times      = np.arange(0, 20, 1/12)
-    start_year = 2020
+    time = np.arange(2020, 2040, 1/12)
 
     num_mc_sims     = 1000
     k_scale_factors = np.random.normal(loc=1.0, scale=0.2, size=num_mc_sims)
 
     if test:
         k_scale_factors = [1.0]
-        times = np.arange(0, 5, 1/12)
+        time = np.arange(2020, 2025, 1/12)
 
     tag_date    = datetime.now().strftime('%Y-%m-%d')
     experiments = []
@@ -84,8 +83,7 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
             data_path          = data_path,
             output_path        = output_path + f'exp26_{tag}.nc',
             scenario           = 'none',
-            start_year         = start_year,
-            times              = times,
+            time               = time,
             max_steps_per_file = 2000,
             q_AT_mask          = q_AT_mask,
             attrs              = {

@@ -18,6 +18,7 @@ import matplotlib.ticker as mticker
 
 from oae_tmm import loaders
 from oae_tmm.grid import make_3d
+from experiments.base import rho
 
 # notes about these test files: exp22 and exp23 pre and post-refactor are not 
 # the same because I changed the mldmask calculation logic to not include cells 
@@ -27,9 +28,9 @@ from oae_tmm.grid import make_3d
 # However, earlier testing before these changes showed that outputs were the 
 # same to numerical precision before and after the refactor.
 
-test_files = ['exp22_2026-06-12_test_ssp126_000.nc',
+test_files = ['exp22_2026-06-15_test_ssp126_000.nc',
               'exp22_TEST_000.nc', # before refactor
-              'exp23_2026-06-12_test_ssp126_000.nc',
+              'exp23_2026-06-15_test_ssp126_000.nc',
               'exp23_TEST_000.nc', # before refactor
               'exp24_2026-06-12_t-mixed_00000_000.nc',
               'exp24_TEST_000.nc', # before refactor
@@ -99,19 +100,19 @@ ct_add  = 'CT_added' if 'CT_added' in ds else 'DIC_added'
 lats   = ds[lat_key].values
 lons   = ds[lon_key].values
 depths = ds['depth'].values
-times  = ds['time'].values
+time  = ds['time'].values
 
 print(f'=== {os.path.basename(filepath)} ===')
 for k in ('experiment', 'scenario', 'tag'):
     if k in ds.attrs:
         print(f'  {k}: {ds.attrs[k]}')
-print(f'  time:  {times[0]:.4f} → {times[-1]:.4f} yr  ({len(times)} steps)')
+print(f'  time:  {time[0]:.4f} → {time[-1]:.4f} yr  ({len(time)} steps)')
 print(f'  grid:  {len(lats)} lat × {len(lons)} lon × {len(depths)} depth')
 print(f'  size:  {os.path.getsize(filepath) / 1024**2:.1f} MB')
 
 
 #%% variable summary + IC check
-final = len(times) - 1
+final = len(time) - 1
 print('Variable summary (final timestep):')
 _print_stats('delAT (µmol kg⁻¹)',     ds['delAT'].isel(time=final).values)
 _print_stats(f'{ct_key} (µmol kg⁻¹)', ds[ct_key].isel(time=final).values)
@@ -130,7 +131,6 @@ print(f'  {status}  (delAT=0: {at_ok}, {ct_key}=0: {ct_ok}, delxCO2=0: {xco_ok})
 #%% load grid
 grid        = loaders.load_ocim(data_path)
 ocnmask     = grid['ocnmask']
-rho         = grid['rho']
 cell_vol_3d = make_3d(grid['cell_volume'], ocnmask)   # (n_lat, n_lon, n_depth)
 longitude   = grid['longitude']
 latitude    = grid['latitude']
@@ -151,11 +151,11 @@ CT_added_pmol = np.nansum(ds[ct_add].values    * cell_vol_3d[np.newaxis] * rho,
 
 fig1, axes1 = plt.subplots(5, 1, figsize=(10, 11), sharex=True)
 fig1.suptitle(os.path.basename(filepath), fontsize=10)
-axes1[0].plot(times, delAT_pmol);             axes1[0].set_ylabel('∆AT [Pmol]')
-axes1[1].plot(times, delCT_pmol);             axes1[1].set_ylabel(f'∆{ct_key[3:]} [Pmol]')
-axes1[2].plot(times, ds['delxCO2'].values);   axes1[2].set_ylabel('∆xCO₂ [ppm]')
-axes1[3].plot(times, AT_added_pmol);          axes1[3].set_ylabel('AT_added [Pmol]')
-axes1[4].plot(times, CT_added_pmol);          axes1[4].set_ylabel(f'{ct_add} [Pmol]')
+axes1[0].plot(time, delAT_pmol);             axes1[0].set_ylabel('∆AT [Pmol]')
+axes1[1].plot(time, delCT_pmol);             axes1[1].set_ylabel(f'∆{ct_key[3:]} [Pmol]')
+axes1[2].plot(time, ds['delxCO2'].values);   axes1[2].set_ylabel('∆xCO₂ [ppm]')
+axes1[3].plot(time, AT_added_pmol);          axes1[3].set_ylabel('AT_added [Pmol]')
+axes1[4].plot(time, CT_added_pmol);          axes1[4].set_ylabel(f'{ct_add} [Pmol]')
 axes1[4].set_xlabel('year')
 for ax in axes1:
     ax.axhline(0, color='k', lw=0.5, ls='--')
@@ -165,7 +165,7 @@ plt.show()
 
 
 #%% Figure 2: delAT maps (surface + transect)
-t_idxs = [0, len(times) // 2, len(times) - 1]
+t_idxs = [0, len(time) // 2, len(time) - 1]
 t_lbls = ['first', 'mid', 'final']
 
 arr = ds['delAT'].values
@@ -175,7 +175,7 @@ vmin, vmax = -absmax, absmax
 fig2, axes2 = plt.subplots(2, 3, figsize=(15, 6))
 fig2.suptitle(f'∆AT (µmol kg⁻¹) — {os.path.basename(filepath)}', fontsize=10)
 for col, (ti, tlbl) in enumerate(zip(t_idxs, t_lbls)):
-    yr = float(times[ti])
+    yr = float(time[ti])
     _map_panel(axes2[0, col], lons, lats, arr[ti, :, :, 0],
                f'{tlbl} (t={yr:.1f}) — surface', vmin, vmax, 'RdBu_r')
     _section_panel(axes2[1, col], latitude, depth, arr[ti, :, lon_idx, :],
@@ -194,7 +194,7 @@ vmin, vmax = -absmax, absmax
 fig3, axes3 = plt.subplots(2, 3, figsize=(15, 6))
 fig3.suptitle(f'∆{ct_key[3:]} (µmol kg⁻¹) — {os.path.basename(filepath)}', fontsize=10)
 for col, (ti, tlbl) in enumerate(zip(t_idxs, t_lbls)):
-    yr = float(times[ti])
+    yr = float(time[ti])
     _map_panel(axes3[0, col], lons, lats, arr[ti, :, :, 0],
                f'{tlbl} (t={yr:.1f}) — surface', vmin, vmax, 'RdBu_r')
     _section_panel(axes3[1, col], latitude, depth, arr[ti, :, lon_idx, :],
@@ -214,7 +214,7 @@ t_idxs[0] = 1
 fig4, axes4 = plt.subplots(2, 3, figsize=(15, 6))
 fig4.suptitle(f'AT_added (µmol kg⁻¹) — {os.path.basename(filepath)}', fontsize=10)
 for col, (ti, tlbl) in enumerate(zip(t_idxs, t_lbls)):
-    yr = float(times[ti])
+    yr = float(time[ti])
     _map_panel(axes4[0, col], lons, lats, arr[ti, :, :, 0],
                f'{tlbl} (t={yr:.1f}) — surface', vmin, vmax, 'RdBu_r')
     _section_panel(axes4[1, col], latitude, depth, arr[ti, :, lon_idx, :],
@@ -234,7 +234,7 @@ t_idxs[0] = 1
 fig5, axes5 = plt.subplots(2, 3, figsize=(15, 6))
 fig5.suptitle(f'{ct_add} (µmol kg⁻¹) — {os.path.basename(filepath)}', fontsize=10)
 for col, (ti, tlbl) in enumerate(zip(t_idxs, t_lbls)):
-    yr = float(times[ti])
+    yr = float(time[ti])
     _map_panel(axes5[0, col], lons, lats, arr[ti, :, :, 0],
                f'{tlbl} (t={yr:.1f}) — surface', vmin, vmax, 'RdBu_r')
     _section_panel(axes5[1, col], latitude, depth, arr[ti, :, lon_idx, :],

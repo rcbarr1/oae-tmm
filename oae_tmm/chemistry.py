@@ -2,8 +2,7 @@
 Physical parameterization functions for oae-tmm.
 
 These functions implement Wanninkhof (2014) gas transfer physics (Schmidt
-number, piston velocity). They do not load observational data from disk and do
-not call the PETSc solver.
+number, piston velocity). 
 """
 
 from typing import overload
@@ -53,14 +52,18 @@ def schmidt_number(gas: str, temperature: float | np.ndarray) -> float | np.ndar
     return Sc
 
 
-def calc_piston_velocity(sst_2d: np.ndarray, wspd_2d: np.ndarray) -> np.ndarray:
+@overload
+def calc_piston_velocity(sst: float, wspd: float) -> float: ...
+@overload
+def calc_piston_velocity(sst: np.ndarray, wspd: np.ndarray) -> np.ndarray: ...
+def calc_piston_velocity(sst: float | np.ndarray, wspd: float | np.ndarray) -> float | np.ndarray:
     """Compute the CO2 piston velocity from sea surface temperature and wind speed.
 
     Implements the Wanninkhof (2014) parameterization:
         k = a * U^2 * (Sc / 660)^(-0.5)
     where a = 0.251 is the Wanninkhof (2014) scaling coefficient for annual-
     mean wind speeds, U is 10-m wind speed, and Sc is the Schmidt number for
-    CO2 evaluated at SST. 
+    CO2 evaluated at SST.
 
     Output is converted from cm h^-1 to m yr^-1 for use with the annual-
     timestep OCIM2-48L transport matrix.
@@ -71,18 +74,19 @@ def calc_piston_velocity(sst_2d: np.ndarray, wspd_2d: np.ndarray) -> np.ndarray:
 
     Parameters
     ----------
-    sst_2d : np.ndarray
-        Annual mean sea surface temperature [degrees C], shape (n_lat, n_lon).
-    wspd_2d : np.ndarray
-        Annual mean wind speed at 10 m [m s^-1], shape (n_lat, n_lon).
+    sst : float or np.ndarray
+        Annual mean sea surface temperature [degrees C]. Accepts scalars or
+        arrays of any shape.
+    wspd : float or np.ndarray
+        Annual mean wind speed at 10 m [m s^-1]. Same shape as sst.
 
     Returns
     -------
-    np.ndarray
-        Piston velocity [m yr^-1], shape (n_lat, n_lon).
+    float or np.ndarray
+        Piston velocity [m yr^-1], same shape as sst.
     """
-    Sc_2d = schmidt_number('CO2', sst_2d)
-    k_2d = 0.251 * wspd_2d**2 * (Sc_2d / 660)**-0.5  # [cm h^-1]
-    k_2d *= (24 * 365.25 / 100)  # convert cm h^-1 to m yr^-1
-    return k_2d
+    Sc = schmidt_number('CO2', sst)
+    k = 0.251 * wspd**2 * (Sc / 660)**-0.5  # [cm h^-1]
+    k *= (24 * 365.25 / 100)  # convert cm h^-1 to m yr^-1
+    return k
 

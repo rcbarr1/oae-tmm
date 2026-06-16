@@ -12,7 +12,7 @@ import xarray as xr
 from oae_tmm.grid import make_3d
 
 
-def get_co2_scenario(scenario, times):
+def get_co2_scenario(scenario, time):
     """Return atmospheric CO2 [ppm] for a given SSP scenario at the requested times.
 
     Reads from the pyTRACE CO2TrajectoriesAdjusted.txt file (University of Melbourne
@@ -23,15 +23,15 @@ def get_co2_scenario(scenario, times):
     scenario : str
         Emissions scenario. One of: 'none', 'ssp119', 'ssp126', 'ssp245', 'ssp370',
         'ssp370_lowNTCF', 'ssp434', 'ssp460', 'ssp534_OS', 'REMIND'.
-        'none' holds CO2 fixed at the value of times[0] (historical extrapolation
-        from 2012–2022); a warning is raised if times[0] > 2022.
-    times : np.ndarray
+        'none' holds CO2 fixed at the value of time[0] (historical extrapolation
+        from 2012–2022); a warning is raised if time[0] > 2022.
+    time : np.ndarray
         1D array of decimal years at which to evaluate CO2 [yr CE].
 
     Returns
     -------
     np.ndarray
-        Atmospheric CO2 [ppm], same length as times.
+        Atmospheric CO2 [ppm], same length as time.
     """
     scenarios = {
         'none': 1, 'ssp119': 2, 'ssp126': 3, 'ssp245': 4, 'ssp370': 5,
@@ -50,14 +50,14 @@ def get_co2_scenario(scenario, times):
     co2_values = data[:, scenarios[scenario]]
 
     if scenario != 'none':
-        return np.interp(times, co2_years, co2_values)
+        return np.interp(time, co2_years, co2_values)
 
-    if times[0] > 2022:
+    if time[0] > 2022:
         warnings.warn(
             "'none' scenario chosen, but time > 2022 selected. "
             "CO2 is based on a linear extrapolation from 2012–2022."
         )
-    return np.interp(times[0], co2_years, co2_values) * np.ones_like(times)
+    return np.interp(time[0], co2_years, co2_values) * np.ones_like(time)
 
 
 def plot_surface2d(lats, lons, variable, vmin, vmax, cmap, title):

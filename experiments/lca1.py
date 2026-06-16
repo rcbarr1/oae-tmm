@@ -22,9 +22,9 @@ from datetime import datetime
 import numpy as np
 import xarray as xr
 
-from experiments.base import BaseExperiment, ExperimentConfig, run_cli
+from experiments.base import BaseExperiment, ExperimentConfig, run_cli, rho
 from oae_tmm import loaders, trace
-from oae_tmm.grid import flatten
+from oae_tmm.grid import flatten, make_3d
 
 
 # (lat_idx, lon_idx) on the OCIM2-48L grid, surface layer only
@@ -49,23 +49,19 @@ class LCA1(BaseExperiment):
         AT_amount_tons : float  mass of NaOH added [metric tons]
     """
 
-    def setup(self):
-        """Load temperature_3d and salinity_3d for pyTRACE, then delegate to BaseExperiment.setup()."""
-        base = self.cfg.data_path + 'GLODAPv2.2016b.MappedProduct/'
-        self.temperature_3d = xr.open_dataset(base + 'temperature.nc')['temperature'].values
-        self.salinity_3d = xr.open_dataset(base + 'salinity.nc')['salinity'].values
-        super().setup()
-
-    def _calc_canth(self, year: float, scenario: str) -> np.ndarray:
+    def _calc_canth(self, time: float, scenario: str) -> np.ndarray:
         """Compute Canth by calling pyTRACE directly (required for REMIND scenario)."""
+        temperature_3d = make_3d(self.temperature, self.grid['ocnmask'])
+        salinity_3d    = make_3d(self.salinity, self.grid['ocnmask'])
+
         return trace.calculate_canth(
-            scenario, year, self.temperature_3d, self.salinity_3d,
+            scenario, time, temperature_3d, salinity_3d,
             self.grid['ocnmask'],
             self.grid['latitude'], self.grid['longitude'],
             self.grid['depth'],
         )
 
-    def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
+    def make_q(self, time_current: float, chem: dict, dt: float) -> np.ndarray:
         """Add AT as a pulse during the first month of CDR deployment only.
 
         Converts AT_amount_tons metric tons of NaOH (MW = 17.007 g/mol) to a
@@ -75,13 +71,12 @@ class LCA1(BaseExperiment):
         """
         q = np.zeros(1 + 2 * self.m)
         assert self.cfg.start_CDR is not None
-        t_elapsed = t_current - self.cfg.start_CDR
+        t_elapsed = time_current - self.cfg.start_CDR
         if t_elapsed < 0.0834:
             attrs = self.cfg.attrs
             assert attrs is not None
             AT_amount_tons = attrs['AT_amount_tons']
             V       = self.grid['cell_volume']   # (m,) flattened volumes [m^3]
-            rho     = self.grid['rho']
             q_AT_mask = self.cfg.q_AT_mask
             assert q_AT_mask is not None
             sw_mass = np.sum(V * q_AT_mask) * rho  # [kg] seawater at target cell
@@ -113,15 +108,15 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     ocnmask = grid['ocnmask']
 
     if test:
-        times       = np.concatenate([np.arange(0, 1, 1/12), np.arange(1, 6, 1)])
-        locs        = _LOCATIONS[:1]
-        start_years = [2050.0]
-        at_amounts  = [_AT_AMOUNTS[1]]  # 1 ton only
+        time_offsets = np.concatenate([np.arange(0, 1, 1/12), np.arange(1, 6, 1)])
+        locs         = _LOCATIONS[:1]
+        start_years  = [2050.0]
+        at_amounts   = [_AT_AMOUNTS[1]]  # 1 ton only
     else:
-        times       = np.arange(0, 16, 1/12)
-        locs        = _LOCATIONS
-        start_years = _START_YEARS
-        at_amounts  = _AT_AMOUNTS
+        time_offsets = np.arange(0, 16, 1/12)
+        locs         = _LOCATIONS
+        start_years  = _START_YEARS
+        at_amounts   = _AT_AMOUNTS
 
     tag_date    = datetime.now().strftime('%Y-%m-%d')
     experiments = []
@@ -131,14 +126,14 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
         q_AT_mask = flatten(mask_3d, ocnmask)
 
         for start_year in start_years:
+            time = start_year + time_offsets
             for at in at_amounts:
                 tag = f'{tag_date}_{loc["name"]}_{at["label"]}_{int(start_year)}'
                 cfg = ExperimentConfig(
                     data_path          = data_path,
                     output_path        = output_path + f'LCA1_{tag}.nc',
                     scenario           = 'REMIND',
-                    start_year         = start_year,
-                    times              = times,
+                    time               = time,
                     max_steps_per_file = 2000,
                     start_CDR          = start_year,
                     q_AT_mask          = q_AT_mask,

@@ -1,17 +1,28 @@
 """
 Base experiment class for oae-tmm.
 
-Defines ExperimentConfig (a dataclass for all shared simulation parameters)
-and BaseExperiment (a class encapsulating all shared setup and time-stepping
-logic). Individual experiment files subclass BaseExperiment and override
-make_q() to supply the CDR source/sink schedule.
+Public names exported by this module
+-------------------------------------
+ExperimentConfig — dataclass of all shared simulation parameters: data path,
+    emissions scenario, time axis, output settings, and CDR deployment options.
+
+BaseExperiment — abstract base class encapsulating data loading, preindustrial
+    chemistry setup, and the implicit-Euler time-stepping loop. Subclasses
+    override make_q() to define the CDR source/sink.
+
+run_cli — shared CLI entry point supporting --list, --test, and --exp-id.
+
+Physical constants (importable by subclasses and scripts):
+    rho  = 1025.0  [kg m^-3]   seawater density
+    Patm = 1.0e6   [µatm]      atmospheric pressure
+    Ma   = 1.8e26  [µmol air]  micromoles of air in the atmosphere
 
 Usage pattern:
 
     from experiments.base import BaseExperiment, ExperimentConfig
 
     class MyExperiment(BaseExperiment):
-        def make_q(self, t_current, chem, dt):
+        def make_q(self, time_current, chem, dt):
             q = np.zeros(1 + 2 * self.m)
             # ... experiment-specific CDR source logic ...
             return q
@@ -20,8 +31,7 @@ Usage pattern:
         data_path   = './data/',
         output_path = './outputs/my_experiment.nc',
         scenario    = 'ssp245',
-        start_year  = 2020.0,
-        times       = np.arange(0, 20, 1/12),   # 20 years, monthly steps
+        time        = np.arange(2020, 2040, 1/12),  # 2020–2040, monthly steps
         output_freq = 1,
         attrs       = {'experiment': 'my_experiment', 'AT_added_umol_kg': 50.0},
     )
@@ -33,8 +43,8 @@ The time-stepping loop in run() does the following at each step:
   3. Rebuilds the A matrix (chemistry parameters change each step as CT/AT evolve).
   4. Calls make_q() to get the CDR source/sink for this step.
   5. Advances c by one implicit Euler step (via transport.solve_timestep).
-  6. Accumulates output at the frequency specified by output_freq.
-Output is written once to output_path after the loop completes.
+  6. Writes output to disk every output_freq steps. When max_steps_per_file > 0,
+     rolls over to a new numbered file after that many records.
 
 Carbonate chemistry linearization similar to Nowicki et al. (2024).
 Transport matrix setup similar to Yamamoto et al. (2024).
@@ -53,6 +63,10 @@ from tqdm import tqdm
 
 from oae_tmm import chemistry, loaders, output, trace, transport
 from oae_tmm.grid import flatten
+
+rho  = 1025.0    # seawater density [kg m^-3]
+Patm = 1.0e6     # atmospheric pressure [µatm]
+Ma   = 1.8e26    # micromoles of air in the atmosphere [µmol air]
 
 
 @dataclasses.dataclass
@@ -73,17 +87,15 @@ class ExperimentConfig:
         Emissions scenario for both atmospheric CO2 forcing and TRACE Canth
         interpolation. One of: 'none', 'ssp119', 'ssp126', 'ssp245', 'ssp370',
         'ssp370_lowNTCF', 'ssp434', 'ssp460', 'ssp534_OS'.
-        'none' holds atmospheric CO2 fixed at start_year and uses the TRACE
-        historical (scenario 1) product for Canth.
-    start_year : float
-        Calendar year corresponding to times[0] (decimal years CE).
-    times : np.ndarray
-        1D array of time offsets from start_year [yr], e.g.
-        np.arange(0, 20, 1/12) for 20 years at monthly resolution.
-        The simulation starts at times[0] (initial conditions) and steps
-        forward through times[1:].
+        'none' holds atmospheric CO2 fixed at time[0] and uses the TRACE
+        historical (scenario 1) product to calculate Canth at time[0].
+    time : np.ndarray
+        1D array of calendar years [decimal years C.E.], e.g.
+        np.arange(2020, 2040, 1/12) for 20 years at monthly resolution starting
+        in 2020. time[0] is the simulation start year; the simulation writes
+        initial conditions at time[0] and steps forward through time[1:].
     output_freq : int, optional
-        Write output every N timesteps (default 1 = every step).
+        Write output to NetCDF file every N timesteps (default 1 = every step).
     max_steps_per_file : int, optional
         Maximum number of output records per NetCDF file (default 0 = no
         limit, single file). Set to e.g. 2000 for long hourly runs to keep
@@ -93,8 +105,8 @@ class ExperimentConfig:
         before this year. Default None means CDR is active from the first step.
     q_AT_mask : np.ndarray, optional
         Pre-flattened (m,) mask controlling where AT is added (1 = add, 0 = skip).
-        Built in build_experiments() from MLD or region shapefiles and passed
-        through config so all experiment parameters live in one place.
+        Built in build_experiments() and passed through config so all experiment
+        parameters live in one place.
     attrs : dict, optional
         Experiment metadata written as global attributes to the output NetCDF
         file, e.g. {'scenario': 'ssp245', 'AT_added_umol_kg': 50.0}.
@@ -102,8 +114,7 @@ class ExperimentConfig:
     data_path:           str
     output_path:         str
     scenario:            str
-    start_year:          float
-    times:               np.ndarray
+    time:                np.ndarray
     output_freq:         int   = 1
     max_steps_per_file:  int   = 0
     start_CDR:           Optional[float]      = None
@@ -125,16 +136,16 @@ class BaseExperiment(ABC):
     self.grid       dict            OCIM grid (see loaders.load_ocim)
     self.surf       dict            surface fields (m,) vectors, 0 at depth
                                     (see loaders.load_ncep_noaa)
-    self.AT          np.ndarray (m,) GLODAP gridded total alkalinity [µmol kg^-1]
+    self.AT          np.ndarray (m,) total alkalinity [µmol kg^-1]
     self.temperature np.ndarray (m,) temperature [°C]
     self.salinity    np.ndarray (m,) salinity [unitless]
     self.silicate    np.ndarray (m,) silicate [µmol kg^-1]
     self.phosphate   np.ndarray (m,) phosphate [µmol kg^-1]
     self.CT_preind   np.ndarray (m,) preindustrial CT [µmol kg^-1]
-    self.Canth      np.ndarray (m,) anthropogenic carbon [µmol kg^-1]
-                                    (updated each step in run() when scenario != 'none')
-    self.pH_preind  np.ndarray (m,) preindustrial pH [total scale]
-    self.k          np.ndarray (m,) piston velocity, zero at depth [m yr^-1]
+    self.Canth       np.ndarray (m,) anthropogenic carbon [µmol kg^-1]
+                                     (updated each step in run() when scenario != 'none')
+    self.pH_preind   np.ndarray (m,) preindustrial pH [total scale]
+    self.k           np.ndarray (m,) piston velocity, zero at depth [m yr^-1]
     """
 
     m:           int
@@ -182,8 +193,8 @@ class BaseExperiment(ABC):
         Canth_2002 = flatten(self._calc_canth(2002, 'none'), ocnmask)
         self.CT_preind = glodap['CT'] - Canth_2002
 
-        # Canth at the simulation start year (updated each step during run)
-        self.Canth = flatten(self._calc_canth(self.cfg.start_year, self.cfg.scenario), ocnmask)
+        # Canth at time[0]; updated each step during run() when scenario != 'none'
+        self.Canth = flatten(self._calc_canth(self.cfg.time[0], self.cfg.scenario), ocnmask)
 
         # preindustrial pH from GLODAP CT_preind + GLODAP AT
         # (used in subclasses for CDR targeting)
@@ -202,7 +213,7 @@ class BaseExperiment(ABC):
         """Compute carbonate chemistry for the current state vector c.
 
         Runs PyCO2SYS twice across all ocean cells: once for the unperturbed
-        state (pCO2, aqueous_CO2, R_C) and once with a small AT perturbation
+        state (aqueous_CO2, R_C, K0) and once with a small AT perturbation
         (R_A via numerical differentiation). Surface-only air-sea gas exchange
         is enforced downstream through terms k and f_ice which are zero at depth.
 
@@ -214,13 +225,12 @@ class BaseExperiment(ABC):
         Returns
         -------
         dict with keys:
-            pCO2        : np.ndarray (m,)  current pCO2 [µatm]
+            CT_current  : np.ndarray (m,)  CT_preind + ∆CT + Canth [µmol kg^-1]
+            AT_current  : np.ndarray (m,)  AT + ∆AT [µmol kg^-1]
             aqueous_CO2 : np.ndarray (m,)  aqueous CO2 [µmol kg^-1]
             R_C         : np.ndarray (m,)  Revelle buffer factor
             R_A         : np.ndarray (m,)  Alkalinity buffer factor
             K0          : np.ndarray (m,)  CO2 solubility [(µmol CO2) m^-3 (µatm CO2)^-1]
-            CT_current  : np.ndarray (m,)  CT_preind + ∆CT + Canth [µmol kg^-1]
-            AT_current  : np.ndarray (m,)  AT + ∆AT [µmol kg^-1]
         """
         m = self.m
 
@@ -251,35 +261,35 @@ class BaseExperiment(ABC):
 
         # Solubility constant [(µmol CO2) m^-3 (µatm CO2)^-1]
         # Based on Weiss (1974) https://doi.org/10.1016/0304-4203(74)90015-2
-        K0 = aqueous_CO2 / fCO2 * self.grid['rho']
+        K0 = aqueous_CO2 / fCO2 * rho
 
         gc.collect()
         jax.clear_caches()
 
         return {
-            'pCO2':       pCO2,
+            'CT_current': CT_current,
+            'AT_current': AT_current,
             'aqueous_CO2': aqueous_CO2,
             'R_C':        R_C,
             'R_A':        R_A,
             'K0':         K0,
-            'CT_current': CT_current,
-            'AT_current': AT_current,
         }
 
-    def _calc_canth(self, year: float, scenario: str) -> np.ndarray:
-        """Return 3D Canth [µmol kg^-1] at the given year and scenario.
+    def _calc_canth(self, time: float, scenario: str) -> np.ndarray:
+        """Return 3D Canth [µmol kg^-1] at the given time (decimal years C.E.)
+        and scenario.
 
         Default: interpolates the pre-computed TRACE gridded product. Override
         in subclasses to use direct pyTRACE calls instead (e.g. Exp22).
         """
         return trace.interp_trace(
-            self.cfg.data_path, year, scenario,
+            self.cfg.data_path, time, scenario,
             self.grid['latitude'], self.grid['longitude'],
             self.grid['depth'], self.grid['ocnmask'],
         )
 
     @abstractmethod
-    def make_q(self, t_current: float, chem: dict, dt: float) -> np.ndarray:
+    def make_q(self, time_current: float, chem: dict, dt: float) -> np.ndarray:
         """CDR source/sink flux vector, shape (2m+1,). Must be overridden.
 
         q[0] [µmol CO2 (µmol air)^-1 yr^-1], q[1:(m+1)] [µmol CT kg^-1 yr^-1],
@@ -305,7 +315,7 @@ class BaseExperiment(ABC):
     def run(self):
         """Run the full simulation and write NetCDF output.
 
-        Calls setup() then steps through self.cfg.times[1:]. At each step,
+        Calls setup() then steps through self.cfg.time[1:]. At each step,
         Canth is updated from TRACE (if scenario != 'none'), carbonate
         chemistry is recomputed from the current state, the A matrix is
         rebuilt, make_q() is called for the CDR source, and c is advanced
@@ -320,8 +330,8 @@ class BaseExperiment(ABC):
         self.setup()
 
         ocnmask = self.grid['ocnmask']
-        times   = self.cfg.times
-        dts     = np.diff(times, prepend=np.nan)
+        time = self.cfg.time
+        dts  = np.diff(time, prepend=np.nan)
 
         c = np.zeros(1 + 2 * self.m)
 
@@ -336,17 +346,17 @@ class BaseExperiment(ABC):
             attrs=self.cfg.attrs,
         )
         try:
-            # write initial conditions (all zeros) at t=0
-            output.write_simulation_step(ds, c, np.zeros_like(c), times[0] + self.cfg.start_year, ocnmask)
+            # write initial conditions (all zeros) at time[0]
+            output.write_simulation_step(ds, c, np.zeros_like(c), time[0], ocnmask)
             write_count_in_file += 1
 
-            for i in tqdm(range(1, len(times))):
+            for i in tqdm(range(1, len(time))):
                 dt        = dts[i]
-                t_current = times[i] + self.cfg.start_year
+                time_current = time[i]
 
                 # update Canth from TRACE for the current calendar year
                 if self.cfg.scenario != 'none':
-                    self.Canth = flatten(self._calc_canth(t_current, self.cfg.scenario), ocnmask)
+                    self.Canth = flatten(self._calc_canth(time_current, self.cfg.scenario), ocnmask)
 
                 # recompute carbonate chemistry from current state
                 chem = self._calc_step_chemistry(c)
@@ -357,12 +367,11 @@ class BaseExperiment(ABC):
                     chem['R_C'], chem['R_A'],
                     chem['CT_current'], chem['AT_current'],
                     chem['aqueous_CO2'], chem['K0'],
-                    self.grid['z1'],
-                    rho=self.grid['rho'],
+                    self.grid['z1'], rho, Patm, Ma,
                 )
 
-                if self.cfg.start_CDR is None or t_current >= self.cfg.start_CDR:
-                    q = self.make_q(t_current, chem, dt)
+                if self.cfg.start_CDR is None or time_current >= self.cfg.start_CDR:
+                    q = self.make_q(time_current, chem, dt)
                 else:
                     q = np.zeros(1 + 2 * self.m)
                 c = transport.solve_timestep(A, c, q, dt)
@@ -383,7 +392,7 @@ class BaseExperiment(ABC):
                             attrs=self.cfg.attrs,
                         )
 
-                    output.write_simulation_step(ds, c, q * dt, t_current, ocnmask)
+                    output.write_simulation_step(ds, c, q * dt, time_current, ocnmask)
                     write_count_in_file += 1
                     if write_count_in_file % 20 == 0:
                         ds.sync()
