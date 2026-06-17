@@ -1,19 +1,23 @@
 """
-Exp24: Impulse-response air-sea gas exchange efficiency map (Zhou et al., 2025).
+impulse_response: Impulse-response air-sea gas exchange efficiency map.
 
-Replicates the approach of https://www.nature.com/articles/s41558-024-02179-9: adds
-10 mol AT m-2 yr-1 to one surface ocean grid cell for one month (impulse), then
-lets the system equilibrate. Repeated independently for every surface cell to
+Replicates the approach of Zhou et al. (2025): adds 10 mol AT m-2 yr-1
+to one surface ocean grid cell for one month (impulse), then lets the
+system equilibrate. Repeated independently for every surface cell to
 produce a global map.
+
+Reference: Zhou, B. R. et al. (2025). Mapping the global variation in the
+efficiency of ocean alkalinity enhancement for carbon dioxide removal.
+Nature Climate Change, 15, 59-65. https://doi.org/10.1038/s41558-024-02179-9.
 
 CDR assumption: NaOH (no CT change). Mixed time-stepping (daily for 90 days,
 monthly to year 5, annual to year 15) captures fast air-sea re-equilibration while
 keeping long-tail transport tractable.
 
 CLI usage:
-    python -m experiments.exp24 --exp-id 0
-    python -m experiments.exp24 --list
-    python -m experiments.exp24 --test
+    python -m experiments.impulse_response --exp-id 0
+    python -m experiments.impulse_response --list
+    python -m experiments.impulse_response --test
 """
 
 import numpy as np
@@ -24,7 +28,7 @@ from oae_tmm import loaders
 from oae_tmm.grid import flatten
 
 
-class Exp24(BaseExperiment):
+class ImpulseResponse(BaseExperiment):
     """Impulse-response CDR at a single surface cell (NaOH, one month of AT addition).
 
     Adds 10 mol AT m-2 yr-1 to the one masked surface cell for the first month
@@ -64,10 +68,10 @@ class Exp24(BaseExperiment):
 
 
 def build_experiments(data_path: str, output_path: str, test: bool = False) -> list:
-    """Return a list of Exp24 instances, one per surface ocean grid cell.
+    """Return a list of ImpulseResponse instances, one per surface ocean grid cell.
 
     Loads the OCIM grid and identifies all surface ocean cells, then builds
-    one Exp24 per cell (or just one cell in test mode).
+    one ImpulseResponse per cell (or just one cell in test mode).
     """
     grid    = loaders.load_ocim(data_path)
     ocnmask = grid['ocnmask']
@@ -78,46 +82,48 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     ocn_idxs = np.argwhere(surf_mask == 1)  # shape (n_surface_cells, 3)
 
     # mixed time-step schedule
-    t0 = np.arange(2002, 2002.25, 1/360)   # daily, 2002–2002.25 (first 90 days)
-    t1 = np.arange(2002.25, 2007,  1/12)   # monthly, 2002.25–2007
-    t2 = np.arange(2007,   2018,   1)      # annual, 2007–2018
-    mixed_time = np.concatenate((t0, t1, t2))
+    t0 = np.arange(2030, 2030.25, 1/360)      # daily, first 90 days
+    t1 = np.arange(2030.25, 2045.084, 1/12)   # monthly
+    mixed_time = np.concatenate((t0, t1))
 
     if test:
         cells   = [ocn_idxs[0]]
         indices = [0]
         time = np.arange(2002, 2008, 1.0)
+        scenarios = ['none']
     else:
         cells   = ocn_idxs
         indices = range(len(ocn_idxs))
         time = mixed_time
+        scenarios = ['none', 'ssp126', 'ssp534_OS']
 
     tag_date = datetime.now().strftime('%Y-%m-%d')
     experiments = []
 
-    for cell_num, ocn_idx in zip(indices, cells):
-        tag = f'{tag_date}_t-mixed_{cell_num:05d}'
-        cfg = ExperimentConfig(
-            data_path          = data_path,
-            output_path        = output_path + f'exp24_{tag}.nc',
-            scenario           = 'none',
-            time               = time,
-            max_steps_per_file = 2000,
-            start_CDR          = 2002,
-            attrs              = {
-                'experiment':   'exp24',
-                'tag':          tag,
-                'cell_lat_idx': int(ocn_idx[0]),
-                'cell_lon_idx': int(ocn_idx[1]),
-            },
-        )
-        experiments.append(Exp24(cfg))
+    for scenario in scenarios:
+        for cell_num, ocn_idx in zip(indices, cells):
+            tag = f'{tag_date}_{scenario}_{cell_num:05d}'
+            cfg = ExperimentConfig(
+                data_path          = data_path,
+                output_path        = output_path + f'impulse_response_{tag}.nc',
+                scenario           = scenario,
+                time               = time,
+                max_steps_per_file = 2000,
+                start_CDR          = 2002,
+                attrs              = {
+                    'experiment':   'impulse_response',
+                    'tag':          tag,
+                    'cell_lat_idx': int(ocn_idx[0]),
+                    'cell_lon_idx': int(ocn_idx[1]),
+                },
+            )
+            experiments.append(ImpulseResponse(cfg))
 
     return experiments
 
 
 def main():
-    run_cli(build_experiments, 'Exp24: impulse-response air-sea gas exchange efficiency map')
+    run_cli(build_experiments, 'ImpulseResponse: impulse-response air-sea gas exchange efficiency map')
 
 
 if __name__ == '__main__':

@@ -14,6 +14,21 @@ CLI usage:
     python -m experiments.exp26 --exp-id 0-99
 """
 
+# NOTE ABOUT HOW TO DO THIS IN THE FUTURE
+# see 2026-05-21 notes from meeting with Brendan (notability)
+# need to do uncertainty in glodap variables plus uncertainty in air-sea gas
+# exchange parameterization
+#
+# uncertainty in glodap variables: U = sqrt(u_meas^2 + u_mapping^2)
+# can pull out mapping uncertainty by unsumming in quadrature using standard
+# measurement uncertainties (i.e. 2 umol kg-1 for AT)
+# then, adjust u_meas via normal MC method (normal distribution) and recalculate U
+#
+# for air-sea gas exchange: 20% global value probably won't cut it, instead need
+# to vary U and Sc
+
+
+
 import numpy as np
 from datetime import datetime
 

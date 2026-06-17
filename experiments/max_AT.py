@@ -1,5 +1,5 @@
 """
-Exp23: Maximum alkalinity addition targeting preindustrial surface pH.
+max_AT: Maximum alkalinity addition targeting preindustrial surface pH.
 
 At each timestep, solves for the AT needed to return every surface cell
 (within the mixed layer) to its preindustrial pH and applies that as the
@@ -7,9 +7,9 @@ CDR flux. NaOH is assumed (no CT added). Supports multiple time-step
 resolutions and SSP scenarios.
 
 CLI usage:
-    python -m experiments.exp23 --exp-id 0
-    python -m experiments.exp23 --list
-    python -m experiments.exp23 --test
+    python -m experiments.max_AT --exp-id 0
+    python -m experiments.max_AT --list
+    python -m experiments.max_AT --test
 """
 
 import gc
@@ -24,7 +24,7 @@ from oae_tmm import loaders
 from oae_tmm.grid import flatten
 
 
-class Exp23(BaseExperiment):
+class MaxAT(BaseExperiment):
     """Maximum alkalinity addition to restore preindustrial surface pH.
 
     At each timestep after start_CDR, solves for the AT required to return
@@ -53,17 +53,17 @@ class Exp23(BaseExperiment):
 
 
 def build_experiments(data_path: str, output_path: str, test: bool = False) -> list:
-    """Return a list of Exp23 instances covering all parameter combinations.
+    """Return a list of MaxAT instances covering all parameter combinations.
 
     Loads the minimal OCIM grid data needed to construct the mixed-layer
-    addition mask, then builds one Exp23 per (time resolution, scenario) pair.
+    addition mask, then builds one MaxAT per (time resolution, scenario) pair.
     """
     grid    = loaders.load_ocim(data_path)
     ocnmask = grid['ocnmask']
 
     q_AT_mask = flatten(grid['mldmask'], ocnmask)
 
-    start_CDR = 2020.0  # CDR begins immediately at simulation start
+    start_CDR = 2030.0  # CDR begins immediately at simulation start
 
     if test:
         t_configs = [('test', np.arange(2002, 2008, 1.0))]
@@ -71,8 +71,12 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
         start_CDR = 2002
     else:
         t_configs = [
-            ('t0', np.arange(2020, 2040, 1.0)),    # annual steps
-            ('t1', np.arange(2020, 2040, 1/12)),   # monthly steps
+            ('long',  np.arange(2030, 2080, 1/12)),             # monthly steps for 50 years
+            ('annually', np.arange(2030, 2036, 1.0)),           # annual steps for 5 years
+            ('monthly', np.arange(2030, 2035.084, 1/12)),       # monthly steps for 5 years
+            ('daily', np.arange(2030, 2035.003, 1/360)),        # daily steps for 5 years
+            ('hourly', np.arange(2030, 2035.0002, 1/8640)),     # hourly steps for 5 years
+
         ]
         scenarios = ['none', 'ssp126', 'ssp245', 'ssp534_OS']
 
@@ -83,20 +87,20 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
             tag = f'{tag_date}_{t_name}_{scenario}'
             cfg = ExperimentConfig(
                 data_path          = data_path,
-                output_path        = output_path + f'exp23_{tag}.nc',
+                output_path        = output_path + f'max_AT_{tag}.nc',
                 scenario           = scenario,
                 time               = time,
                 max_steps_per_file = 2000,
                 start_CDR          = start_CDR,
                 q_AT_mask          = q_AT_mask,
-                attrs              = {'experiment': 'exp23', 'scenario': scenario, 'tag': tag},
+                attrs              = {'experiment': 'max_AT', 'scenario': scenario, 'tag': tag},
             )
-            experiments.append(Exp23(cfg))
+            experiments.append(MaxAT(cfg))
     return experiments
 
 
 def main():
-    run_cli(build_experiments, 'Exp23: max AT addition to restore preindustrial pH')
+    run_cli(build_experiments, 'MaxAT: max AT addition to restore preindustrial pH')
 
 
 if __name__ == '__main__':
