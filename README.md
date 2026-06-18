@@ -6,7 +6,7 @@ Ocean alkalinity enhancement (OAE) transport matrix model (TMM). Uses an implici
 
 ## Data sources
 
-Download each dataset and place it in the `data/` directory at the path shown. All datasets are open access; please cite the original sources.
+Download each dataset and place it in the `data/` directory at the path shown. TRACE gridded data should be downloaded, and higher resolution versions covering some key years of interest are precomputed as explained in "data preparation" below. All datasets are open access; please cite the original sources.
 
 | Dataset | Directory | Citation |
 |---------|-----------|----------|
@@ -46,7 +46,17 @@ data/
   NOAA_Extended_Reconstruction_SST_V5/
     sst.nc
   TRACE_gridded/
-    OCIM_CanthFromTRACECO2Pathway1.nc
+    CanthFromTRACECO2Pathway1.nc
+    CanthFromTRACECO2Pathway2.nc
+    CanthFromTRACECO2Pathway3.nc
+    CanthFromTRACECO2Pathway4.nc
+    CanthFromTRACECO2Pathway5.nc
+    CanthFromTRACECO2Pathway6.nc
+    CanthFromTRACECO2Pathway7.nc
+    CanthFromTRACECO2Pathway8.nc
+    CanthFromTRACECO2Pathway9.nc
+    CanthFromTRACECO2Pathway10.nc
+    CanthFromTRACECO2Pathway1.nc
     OCIM_CanthFromTRACECO2Pathway2.nc
     OCIM_CanthFromTRACECO2Pathway3.nc
     OCIM_CanthFromTRACECO2Pathway4.nc
@@ -56,7 +66,6 @@ data/
     OCIM_CanthFromTRACECO2Pathway8.nc
     OCIM_CanthFromTRACECO2Pathway9.nc
     OCIM_CanthFromTRACECO2Pathway10.nc
-    
 ```
 
 ## Installation
