@@ -64,6 +64,9 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     q_AT_mask = flatten(grid['mldmask'], ocnmask)
 
     start_CDR = 2030.0  # CDR begins immediately at simulation start
+    t0 = np.arange(2030, 2030.25, 1/360)           # daily, first 90 days
+    t1 = np.arange(2030.25, 2035.084, 1/12)        # monthly
+    mixed = np.concatenate((t0, t1))
 
     if test:
         t_configs = [('test', np.arange(2002, 2008, 1.0))]
@@ -72,6 +75,7 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     else:
         t_configs = [
             ('long',  np.arange(2030, 2080, 1/12)),             # monthly steps for 50 years
+            ('mixed', mixed),                                   # daily for first 90 days, monthly until 5 years
             ('annually', np.arange(2030, 2036, 1.0)),           # annual steps for 5 years
             ('monthly', np.arange(2030, 2035.084, 1/12)),       # monthly steps for 5 years
             ('daily', np.arange(2030, 2035.003, 1/360)),        # daily steps for 5 years

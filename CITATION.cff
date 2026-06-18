@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: oae-tmm
+authors:
+  - family-names: Barrett
+    given-names: Reese
+    email: rcbarr1@uw.edu
+version: 0.1.0
+date-released: "2025-01-01"
+doi: 10.5281/zenodo.XXXXXXX
+url: https://github.com/<REPO_URL>
+license: MIT
+abstract: >
+  Ocean alkalinity enhancement (OAE) transport matrix model (TMM). Uses an
+  implicit Euler solver with the OCIM2-48L transport matrix to simulate the
+  global evolution of dissolved inorganic carbon and total alkalinity in
+  response to alkalinity perturbations, with air-sea CO2 exchange.
