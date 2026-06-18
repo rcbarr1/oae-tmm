@@ -122,7 +122,7 @@ def interp_trace(data_path, time, scenario, latitude, longitude, depth, ocnmask)
     #              sparse time axis (decadal to centennial), used as fallback
     #              for extended projections.
     #
-    #   >2022      CanthFromTRACECO2Pathway1.nc
+    #   <2022      CanthFromTRACECO2Pathway1.nc
     #              Original published TRACE gridded product (Carter et al.),
     #              which contains historical/linear scenario. This product
     #              is used for historical data.

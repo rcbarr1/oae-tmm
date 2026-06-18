@@ -11,8 +11,8 @@ efficiency of ocean alkalinity enhancement for carbon dioxide removal.
 Nature Climate Change, 15, 59-65. https://doi.org/10.1038/s41558-024-02179-9.
 
 CDR assumption: NaOH (no CT change). Mixed time-stepping (daily for 90 days,
-monthly to year 5, annual to year 15) captures fast air-sea re-equilibration while
-keeping long-tail transport tractable.
+monthly to year 15) captures fast air-sea re-equilibration while keeping
+long-tail transport tractable.
 
 CLI usage:
     python -m experiments.impulse_response --exp-id 0
@@ -31,11 +31,8 @@ from oae_tmm.grid import flatten
 class ImpulseResponse(BaseExperiment):
     """Impulse-response CDR at a single surface cell (NaOH, one month of AT addition).
 
-    Adds 10 mol AT m-2 yr-1 to the one masked surface cell for the first month
-    of the simulation, then zero thereafter. The time-step detection mirrors the
-    original logic: at annual steps the monthly-equivalent flux is applied (÷12);
-    at monthly steps it is applied only for the first month; at daily steps only
-    for the first ~30 days.
+    Adds 10 mol AT m-2 yr-1 to the one masked surface cell for the first ~30 days
+    of the simulation, then zero thereafter.
     """
 
     def __init__(self, cfg):
@@ -58,11 +55,7 @@ class ImpulseResponse(BaseExperiment):
         rate = 10 * 1e6 / self.grid['z1'] / rho  # [µmol AT kg-1 yr-1]
         q_AT_mask = self._get_q_AT_mask()
 
-        if abs(dt - 1) < 0.01 and time_offset <= 1:               # annual step, first year
-            q[(self.m + 1):] = q_AT_mask * rate / 12
-        elif 0.5/12 < dt < 1.5/12 and time_offset <= 31/360:      # monthly step, first month
-            q[(self.m + 1):] = q_AT_mask * rate
-        elif 0.5/360 < dt < 1.5/360 and time_offset <= 30.5/360:  # daily step, first ~30 days
+        if 0.5/360 < dt < 1.5/360 and time_offset <= 30.5/360:     # daily step, first ~30 days
             q[(self.m + 1):] = q_AT_mask * rate
         return q
 
@@ -82,8 +75,8 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     ocn_idxs = np.argwhere(surf_mask == 1)  # shape (n_surface_cells, 3)
 
     # mixed time-step schedule
-    t0 = np.arange(2030, 2030.25, 1/360)      # daily, first 90 days
-    t1 = np.arange(2030.25, 2045.084, 1/12)   # monthly
+    t0 = np.arange(2022, 2022.25, 1/360)           # daily, first 90 days
+    t1 = np.arange(2022.25, 2037.084, 1/12)        # monthly
     mixed_time = np.concatenate((t0, t1))
 
     if test:
@@ -109,7 +102,7 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
                 scenario           = scenario,
                 time               = time,
                 max_steps_per_file = 2000,
-                start_CDR          = 2002,
+                start_CDR          = 2022,
                 attrs              = {
                     'experiment':   'impulse_response',
                     'tag':          tag,
