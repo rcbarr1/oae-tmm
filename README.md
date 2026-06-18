@@ -6,13 +6,13 @@ Ocean alkalinity enhancement (OAE) transport matrix model (TMM). Uses an implici
 
 ## Data sources
 
-Download each dataset and place it in the `data/` directory at the path shown. TRACE gridded data should be downloaded, and higher resolution versions covering some key years of interest are precomputed as explained in "data preparation" below. All datasets are open access; please cite the original sources.
+Download each dataset and place it in the `data/` directory at the path shown. TRACE data is not downloaded from the TRACE gridded product (https://doi.org/10.5281/zenodo.15692788), but higher resolution versions are precomputed as explained in "data preparation" below. All datasets are open access; please cite the original sources.
 
 | Dataset | Directory | Citation |
 |---------|-----------|----------|
 | OCIM2-48L transport matrix | `data/OCIM2_48L_base/` | Holzer et al. (2021) — [DOI PLACEHOLDER] |
 | GLODAPv2.2016b Mapped Product | `data/GLODAPv2.2016b.MappedProduct/` | [CITATION PLACEHOLDER] — [DOI PLACEHOLDER] |
-| NCEP/DOE Reanalysis II (ice fraction, wind speed) | `data/NCEP_DOE_Reanalysis_II/` | Kanamitsu et al. (2002) — https://psl.noaa.gov/data/gridded/data.ncep.reanalysis2.html |
+| NCEP/DOE Reanalysis II (ice fraction, wind speed) | `data/NCEP_DOE_Reanalysis_II/` | [CITATION PLACEHOLDER] — [DOI PLACEHOLDER] |
 | NOAA Extended Reconstruction SST V5 | `data/NOAA_Extended_Reconstruction_SST_V5/` | [CITATION PLACEHOLDER] — [DOI PLACEHOLDER] |
 | TRACE anthropogenic CO₂ scenarios | `data/TRACE_gridded/` | [CITATION PLACEHOLDER] — [DOI PLACEHOLDER] |
 
@@ -46,17 +46,6 @@ data/
   NOAA_Extended_Reconstruction_SST_V5/
     sst.nc
   TRACE_gridded/
-    CanthFromTRACECO2Pathway1.nc
-    CanthFromTRACECO2Pathway2.nc
-    CanthFromTRACECO2Pathway3.nc
-    CanthFromTRACECO2Pathway4.nc
-    CanthFromTRACECO2Pathway5.nc
-    CanthFromTRACECO2Pathway6.nc
-    CanthFromTRACECO2Pathway7.nc
-    CanthFromTRACECO2Pathway8.nc
-    CanthFromTRACECO2Pathway9.nc
-    CanthFromTRACECO2Pathway10.nc
-    CanthFromTRACECO2Pathway1.nc
     OCIM_CanthFromTRACECO2Pathway2.nc
     OCIM_CanthFromTRACECO2Pathway3.nc
     OCIM_CanthFromTRACECO2Pathway4.nc
