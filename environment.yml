@@ -3,6 +3,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
+  - cartopy=0.25.0
   - dask=2026.6.0
   - geopandas=1.0.1
   - geopandas-base=1.0.1

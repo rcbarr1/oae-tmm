@@ -7,10 +7,15 @@ DATAVIZ FOR MAX_AT: Maximum alkalinity calculation
 """
 #%%
 from dataviz.dataviz import broadcast_to_dataset, get_co2_scenario
+from oae_tmm.grid import flatten, make_3d
+from oae_tmm.trace import calculate_canth
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 import os
+import PyCO2SYS as pyco2
 from tqdm.auto import tqdm
 from tqdm.dask import TqdmCallback
 
@@ -24,16 +29,17 @@ ocnmask = model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_n
 
 latitude    = model_data['tlat'].isel(depth=0, longitude=0).to_numpy()    # ºN
 longitude   = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()     # ºE
+depth       = model_data['tz'].isel(longitude=0, latitude=0).to_numpy()   # m below sea surface
 cell_volume = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy() # m^3
 
 model_data.close()
 rho = 1025  # seawater density [kg m-3]
 
 #%% pull timestepping comparison experiments (generated with --test --exp-id 0-6)
-experiment_names = ['max_AT_2026-06-24_long_none',
-                    'max_AT_2026-06-24_long_ssp126',
-                    'max_AT_2026-06-24_long_ssp245',
-                    'max_AT_2026-06-24_long_ssp534']
+experiment_names = ['max_AT_2026-06-26_long_none',
+                    'max_AT_2026-06-26_long_ssp126',
+                    'max_AT_2026-06-26_long_ssp245',
+                    'max_AT_2026-06-26_long_ssp534']
 
 labels = ['None', 'SSP1-2.6', 'SSP2-4.5', 'SSP5-3.4 OS']
 scenarios = ['none', 'ssp126', 'ssp245', 'ssp534_OS']
@@ -138,8 +144,10 @@ plt.legend()
 
 # %% four-panel full-ocean totals figure for paper
 # a. cumulative AT added over time
-# b. change in atmospheric CO2 over time
-# c. oae efficiency over time (delCT / delAT)
+# b. oae efficiency over time (delCT / delAT)
+# c. change in atmospheric CO2 over time
+# d. deviation from non max AT co2 trajectories
+
 fig, axes = plt.subplots(2, 2, figsize=(10, 6), dpi=200)
 
 pre_time = np.arange(2020, 2030, 1)
@@ -186,6 +194,212 @@ axes[1][1].set_xlim([2020, 2100])
 
 plt.tight_layout()
 
-# %% pH changes visualization figure 
+#%% load data for pH calculations
+
+# get GLODAP data
+_glodap = data_path + 'GLODAPv2.2016b.MappedProduct/'
+CT_3d          = xr.open_dataset(_glodap + 'CT.nc')['CT'].values                    # dissolved inorganic carbon [µmol kg-1]
+AT_3d          = xr.open_dataset(_glodap + 'AT.nc')['AT'].values                    # total alkalinity [µmol kg-1]
+temperature_3d = xr.open_dataset(_glodap + 'temperature.nc')['temperature'].values  # temperature [ºC]
+salinity_3d    = xr.open_dataset(_glodap + 'salinity.nc')['salinity'].values        # salinity [unitless]
+silicate_3d    = xr.open_dataset(_glodap + 'silicate.nc')['silicate'].values        # silicate [µmol kg-1]
+phosphate_3d   = xr.open_dataset(_glodap + 'phosphate.nc')['phosphate'].values      # phosphate [µmol kg-1]
+
+salinity    = flatten(salinity_3d,    ocnmask)
+temperature = flatten(temperature_3d, ocnmask)
+silicate    = flatten(silicate_3d,    ocnmask)
+phosphate   = flatten(phosphate_3d,   ocnmask)
+
+# create "pressure" array by broadcasting depth array
+pressure_3d = np.tile(depth[:, np.newaxis, np.newaxis], (1, ocnmask.shape[0], ocnmask.shape[1])).transpose([1, 2, 0])
+pressure    = flatten(pressure_3d, ocnmask)
+
+#%% calculate pH (no OAE) on OCIM grid in 2050 and 2100 using SSP2-4.5
+
+# get TRACE data
+Canth_2002_3d = calculate_canth('none', 2002, temperature_3d, salinity_3d, ocnmask, latitude, longitude, depth)
+Canth_2050_3d = calculate_canth('ssp245', 2050, temperature_3d, salinity_3d, ocnmask, latitude, longitude, depth)
+Canth_2100_3d = calculate_canth('ssp245', 2100, temperature_3d, salinity_3d, ocnmask, latitude, longitude, depth)
+
+# calculate preindustrial CT by subtracting anthropogenic carbon
+CT_preind_3d = CT_3d - Canth_2002_3d
+
+CT_2050_3d = CT_preind_3d + Canth_2050_3d
+CT_2100_3d = CT_preind_3d + Canth_2100_3d
+
+# calculate pH assuming steady state alkalinity
+co2sys_2050 = pyco2.sys(dic=flatten(CT_2050_3d, ocnmask),
+                        alkalinity=flatten(AT_3d, ocnmask),
+                        salinity=salinity, temperature=temperature, pressure=pressure,
+                        total_silicate=silicate, total_phosphate=phosphate)
+pH_2050     = co2sys_2050['pH']
+RC_2050     = co2sys_2050['revelle_factor']
+omegaC_2050 = co2sys_2050['saturation_calcite']
+
+pH_2050_3d     = make_3d(pH_2050, ocnmask)
+RC_2050_3d     = make_3d(RC_2050, ocnmask)
+omegaC_2050_3d = make_3d(omegaC_2050, ocnmask)
+
+co2sys_2100 = pyco2.sys(dic=flatten(CT_2100_3d, ocnmask),
+                        alkalinity=flatten(AT_3d, ocnmask),
+                        salinity=salinity, temperature=temperature, pressure=pressure,
+                        total_silicate=silicate, total_phosphate=phosphate)
+pH_2100     = co2sys_2100['pH']
+RC_2100     = co2sys_2100['revelle_factor']
+omegaC_2100 = co2sys_2100['saturation_calcite']
+
+pH_2100_3d     = make_3d(pH_2100, ocnmask)
+RC_2100_3d     = make_3d(RC_2100, ocnmask)
+omegaC_2100_3d = make_3d(omegaC_2100, ocnmask)
+
+#%% calculate pH (max OAE) on OCIM grid in 2050 and 2100 using SSP2-4.5
+
+with xr.open_mfdataset(
+        output_path + experiment_names[2] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True) as ds:
+    
+    CT_OAE_2050_3d = CT_preind_3d + Canth_2050_3d + ds['delCT'].sel(time=2050, method='nearest', tolerance=0.5).values
+    CT_OAE_2100_3d = CT_preind_3d + Canth_2100_3d + ds['delCT'].sel(time=2100, method='nearest', tolerance=0.5).values
+
+    AT_OAE_2050_3d = AT_3d + ds['delAT'].sel(time=2050, method='nearest', tolerance=0.5).values
+    AT_OAE_2100_3d = AT_3d + ds['delAT'].sel(time=2100, method='nearest', tolerance=0.5).values
+
+# calculate pH assuming steady state alkalinity
+co2sys_OAE_2050 = pyco2.sys(dic=flatten(CT_OAE_2050_3d, ocnmask),
+                            alkalinity=flatten(AT_OAE_2050_3d, ocnmask),
+                            salinity=salinity, temperature=temperature, pressure=pressure,
+                            total_silicate=silicate, total_phosphate=phosphate)
+pH_OAE_2050       = co2sys_OAE_2050['pH']
+RC_OAE_2050       = co2sys_OAE_2050['revelle_factor']
+omegaC_OAE_2050   = co2sys_OAE_2050['saturation_calcite']
+
+pH_OAE_2050_3d     = make_3d(pH_OAE_2050, ocnmask)
+RC_OAE_2050_3d     = make_3d(RC_OAE_2050, ocnmask)
+omegaC_OAE_2050_3d = make_3d(omegaC_OAE_2050, ocnmask)
+
+co2sys_OAE_2100 = pyco2.sys(dic=flatten(CT_OAE_2100_3d, ocnmask),
+                            alkalinity=flatten(AT_OAE_2100_3d, ocnmask),
+                            salinity=salinity, temperature=temperature, pressure=pressure,
+                            total_silicate=silicate, total_phosphate=phosphate)
+pH_OAE_2100       = co2sys_OAE_2100['pH']
+RC_OAE_2100       = co2sys_OAE_2100['revelle_factor']
+omegaC_OAE_2100   = co2sys_OAE_2100['saturation_calcite']
+
+pH_OAE_2100_3d     = make_3d(pH_OAE_2100, ocnmask)
+RC_OAE_2100_3d     = make_3d(RC_OAE_2100, ocnmask)
+omegaC_OAE_2100_3d = make_3d(omegaC_OAE_2100, ocnmask)
+
+del_pH_2050_3d     = pH_OAE_2050_3d - pH_2050_3d
+del_RC_2050_3d     = RC_OAE_2050_3d - RC_2050_3d
+del_omegaC_2050_3d = omegaC_OAE_2050_3d - omegaC_2050_3d
+
+del_pH_2100_3d     = pH_OAE_2100_3d - pH_2100_3d
+del_RC_2100_3d     = RC_OAE_2100_3d - RC_2100_3d
+del_omegaC_2100_3d = omegaC_OAE_2100_3d - omegaC_2100_3d
+
+# %% pH changes visualization figure (SSP2-4.5, max OAE vs. no OAE)
+# rows: 2050 (top), 2100 (bottom)
+# cols: surface map | Pacific (209°E) | Atlantic (335°E) | Indian Ocean (91°E)
+
+pac_idx, atl_idx, ind_idx = 104, 167, 45
+section_lons = [longitude[pac_idx], longitude[atl_idx], longitude[ind_idx]]
+section_lat_lims = [(59, -75), (67, -76), (21, -66)]  # (north, south) to match N-to-S latitude axis
+
+del_pH_by_year = {
+    2050: [del_pH_2050_3d[:, :, 0],
+           del_pH_2050_3d[:, pac_idx, :],
+           del_pH_2050_3d[:, atl_idx, :],
+           del_pH_2050_3d[:, ind_idx, :]],
+    2100: [del_pH_2100_3d[:, :, 0],
+           del_pH_2100_3d[:, pac_idx, :],
+           del_pH_2100_3d[:, atl_idx, :],
+           del_pH_2100_3d[:, ind_idx, :]],
+}
+
+vmax = max(np.nanmax(np.abs(d)) for row in del_pH_by_year.values() for d in row)
+
+sec_col_titles = ['Pacific (209°E)', 'Atlantic (335°E)', 'Indian Ocean (91°E)']
+
+data_crs = ccrs.PlateCarree()
+map_proj = ccrs.EqualEarth(central_longitude=200)
+
+# figure 1: surface maps (2050 and 2100 side by side)
+fig1, map_axes = plt.subplots(1, 2, figsize=(14, 4), dpi=200,
+                              subplot_kw={'projection': map_proj})
+
+for col_idx, year in enumerate([2050, 2100]):
+    im = map_axes[col_idx].pcolormesh(longitude, latitude, del_pH_by_year[year][0],
+                                      cmap='RdBu', vmin=-vmax, vmax=vmax,
+                                      transform=data_crs)
+    map_axes[col_idx].add_feature(cfeature.LAND, facecolor='lightgray', zorder=1)
+    map_axes[col_idx].coastlines(linewidth=0.5)
+    for sec_lon, lat_lim in zip(section_lons, section_lat_lims):
+        map_axes[col_idx].plot([sec_lon, sec_lon], list(lat_lim), color='yellow', linewidth=0.8,
+                               transform=data_crs)
+    map_axes[col_idx].set_title(f'{year}')
+
+plt.tight_layout()
+fig1.subplots_adjust(right=0.88)
+cbar_ax = fig1.add_axes([0.90, 0.1, 0.015, 0.8])
+fig1.colorbar(im, cax=cbar_ax, label='ΔpH (max OAE − no OAE)')
+
+# figure 3: surface maps of ΔpH, ΔRevelle factor, ΔΩ_C (3 rows × 2 cols)
+surface_vars = [
+    (r'$\Delta$pH',             del_pH_2050_3d[:, :, 0],     del_pH_2100_3d[:, :, 0]),
+    (r'$\Delta$Revelle factor', del_RC_2050_3d[:, :, 0],     del_RC_2100_3d[:, :, 0]),
+    (r'$\Delta\Omega_C$',       del_omegaC_2050_3d[:, :, 0], del_omegaC_2100_3d[:, :, 0]),
+]
+
+fig3, axes3 = plt.subplots(3, 2, figsize=(12, 9), dpi=200,
+                            subplot_kw={'projection': map_proj})
+
+im_list = []
+for row_idx, (var_label, data_2050, data_2100) in enumerate(surface_vars):
+    vmax_row = max(np.nanmax(np.abs(data_2050)), np.nanmax(np.abs(data_2100)))
+    for col_idx, (year, data) in enumerate([(2050, data_2050), (2100, data_2100)]):
+        im = axes3[row_idx, col_idx].pcolormesh(longitude, latitude, data,
+                                                cmap='RdBu', vmin=-vmax_row, vmax=vmax_row,
+                                                transform=data_crs)
+        axes3[row_idx, col_idx].add_feature(cfeature.LAND, facecolor='lightgray', zorder=1)
+        axes3[row_idx, col_idx].coastlines(linewidth=0.5)
+        for sec_lon, lat_lim in zip(section_lons, section_lat_lims):
+            axes3[row_idx, col_idx].plot([sec_lon, sec_lon], list(lat_lim), color='yellow',
+                                         linewidth=0.8, transform=data_crs)
+        if row_idx == 0:
+            axes3[row_idx, col_idx].set_title(str(year))
+    im_list.append((im, var_label))
+
+plt.tight_layout()
+fig3.subplots_adjust(right=0.85, hspace=0.35)
+for row_idx, (im, var_label) in enumerate(im_list):
+    ax_pos = axes3[row_idx, 1].get_position()
+    cbar_ax = fig3.add_axes([0.87, ax_pos.y0, 0.015, ax_pos.height])
+    fig3.colorbar(im, cax=cbar_ax, label=f'{var_label} (max OAE − no OAE)')
+
+sec_cmap = plt.cm.RdBu.copy()
+sec_cmap.set_bad('lightgray')
+
+# figure 2: interior sections (2 rows × 3 cols)
+fig2, sec_axes = plt.subplots(2, 3, figsize=(12, 7), dpi=200)
+
+for row_idx, year in enumerate([2050, 2100]):
+    for col_idx, (section, lat_lim, title) in enumerate(
+            zip(del_pH_by_year[year][1:], section_lat_lims, sec_col_titles)):
+        im = sec_axes[row_idx, col_idx].pcolormesh(latitude, depth, section.T,
+                                                   cmap=sec_cmap, vmin=-vmax, vmax=vmax)
+        sec_axes[row_idx, col_idx].set_xlabel('Latitude (°N)')
+        sec_axes[row_idx, col_idx].set_ylabel('Depth (m)')
+        sec_axes[row_idx, col_idx].set_xlim(lat_lim[1], lat_lim[0])
+        sec_axes[row_idx, col_idx].set_ylim(0, 2500)
+        sec_axes[row_idx, col_idx].invert_yaxis()
+        sec_axes[row_idx, col_idx].set_title(f'{title}, {year}')
+
+plt.tight_layout()
+fig2.subplots_adjust(right=0.87)
+cbar_ax = fig2.add_axes([0.89, 0.1, 0.015, 0.8])
+fig2.colorbar(im, cax=cbar_ax, label='ΔpH (max OAE − no OAE)')
 
 
+#%%
