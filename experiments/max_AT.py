@@ -9,7 +9,8 @@ resolutions and SSP scenarios.
 CLI usage:
     python -m experiments.max_AT --exp-id 0
     python -m experiments.max_AT --list
-    python -m experiments.max_AT --test
+    python -m experiments.max_AT --test --list
+    python -m experiments.max_AT --test --exp-id 0-6
 """
 
 import gc
@@ -55,32 +56,37 @@ class MaxAT(BaseExperiment):
 def build_experiments(data_path: str, output_path: str, test: bool = False) -> list:
     """Return a list of MaxAT instances covering all parameter combinations.
 
-    Loads the minimal OCIM grid data needed to construct the mixed-layer
-    addition mask, then builds one MaxAT per (time resolution, scenario) pair.
+    In test mode: 7 timestep resolutions × scenario='none', 5-year runs.
+    Used to compare how timestep size affects the result (use --test --list
+    to see all experiments; --test --exp-id 0-6 to run).
+
+    In production mode: long (daily for 50 years), for each SSP scenario.
     """
     grid    = loaders.load_ocim(data_path)
     ocnmask = grid['ocnmask']
 
     q_AT_mask = flatten(grid['mldmask'], ocnmask)
 
-    start_CDR = 2030.0  # CDR begins immediately at simulation start
-    t0 = np.arange(2030, 2030.25, 1/360)           # daily, first 90 days
-    t1 = np.arange(2030.25, 2035.084, 1/12)        # monthly
-    mixed = np.concatenate((t0, t1))
-
+    start_CDR = 2030.0
+    
     if test:
-        t_configs = [('test', np.arange(2002, 2008, 1.0))]
-        scenarios = ['ssp126']
-        start_CDR = 2002
+        t0 = np.arange(2030, 2030.25, 1/360)           # daily, first 90 days
+        t1 = np.arange(2030.25, 2035.084, 1/12)        # monthly
+        mixed = np.concatenate((t0, t1))
+
+        t_configs = [
+            ('annually', np.arange(2030, 2036,      1.0   )),
+            ('monthly',  np.arange(2030, 2035.084,  1/12  )),
+            ('dekadal',  np.arange(2030, 2035.028,  1/36  )),
+            ('pentadal', np.arange(2030, 2035.014,  1/72  )),
+            ('daily',    np.arange(2030, 2035.003,  1/360 )),
+            ('hourly',   np.arange(2030, 2035.0002, 1/8640)),
+            ('mixed',    mixed),
+        ]
+        scenarios = ['none']
     else:
         t_configs = [
-            ('long',  np.arange(2030, 2080, 1/12)),             # monthly steps for 50 years
-            ('mixed', mixed),                                   # daily for first 90 days, monthly until 5 years
-            ('annually', np.arange(2030, 2036, 1.0)),           # annual steps for 5 years
-            ('monthly', np.arange(2030, 2035.084, 1/12)),       # monthly steps for 5 years
-            ('daily', np.arange(2030, 2035.003, 1/360)),        # daily steps for 5 years
-            ('hourly', np.arange(2030, 2035.0002, 1/8640)),     # hourly steps for 5 years
-
+            ('long', np.arange(2030, 2100, 1/360)),
         ]
         scenarios = ['none', 'ssp126', 'ssp245', 'ssp534_OS']
 

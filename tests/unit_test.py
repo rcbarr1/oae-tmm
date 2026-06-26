@@ -15,6 +15,7 @@ Coverage:
   transport.build_A_matrix        — block shape/format, zero air-sea blocks when k=0
   output.write_simulation_step    — ×1e6 unit conversion, c-vector slicing, float32 storage
   base.BaseExperiment._output_path — single-file passthrough, multi-file suffix formatting
+  ImpulseResponse.make_q          — overlap-fraction logic conserves total AT across all dt
 
 Usage:
     python tests/unit_test.py
@@ -35,6 +36,7 @@ from oae_tmm.chemistry import schmidt_number, calc_piston_velocity
 from oae_tmm.transport import build_A_matrix
 from oae_tmm.output import open_simulation_output, write_simulation_step
 from experiments.base import BaseExperiment, ExperimentConfig, rho, Patm, Ma
+from experiments.impulse_response import ImpulseResponse
 
 
 def _pass(msg): print(f'  PASS  {msg}')
@@ -644,21 +646,102 @@ def test_output_path():
     return passed
 
 
+# ── ImpulseResponse.make_q overlap logic ─────────────────────────────────────
+
+def test_impulse_make_q():
+    """ImpulseResponse.make_q: overlap-fraction logic conserves total AT across all dt.
+
+    Verifies three properties:
+      1. Total AT added (sum of q_AT * dt over all steps) equals rate * impulse_end
+         for every timestep resolution, because the overlap fraction scales rate so
+         the contribution from each step is proportional to how much of that step
+         falls within the 30-day impulse window.
+      2. q is exactly zero for all steps whose window lies entirely after impulse_end.
+      3. AT flux lands only on the designated cell; xCO2 and CT components are zero.
+    """
+    print('\n--- ImpulseResponse.make_q overlap logic ---')
+    passed = True
+
+    # Minimal stub: set only the attributes make_q touches (no data loading).
+    m           = 6
+    target_cell = 3
+    z1          = 36.0
+
+    cfg = ExperimentConfig(
+        data_path='./', output_path='./test.nc',
+        scenario='none', time=np.array([2022.0]),
+    )
+    exp              = ImpulseResponse(cfg)
+    exp.m            = m
+    exp.grid         = {'z1': z1}
+    exp._q_AT_mask   = np.zeros(m)
+    exp._q_AT_mask[target_cell] = 1.0
+
+    rate           = 10 * 1e6 / z1 / rho   # [µmol AT kg⁻¹ yr⁻¹]
+    impulse_end    = 30 / 360
+    expected_total = rate * impulse_end
+
+    def total_AT_added(time):
+        total = 0.0
+        for dt_i, t_cur in zip(np.diff(time), time[1:]):
+            q = exp.make_q(t_cur, {}, dt_i)
+            total += q[m + 1 + target_cell] * dt_i
+        return total
+
+    # 1. Total AT is conserved across all timestep resolutions.
+    for name, time in [
+        ('annual',   np.arange(2022, 2028,     1.0   )),
+        ('monthly',  np.arange(2022, 2027.084, 1/12  )),
+        ('dekadal',  np.arange(2022, 2027.028, 1/36  )),
+        ('pentadal', np.arange(2022, 2027.014, 1/72  )),
+        ('daily',    np.arange(2022, 2027.003, 1/360 )),
+    ]:
+        tot = total_AT_added(time)
+        passed &= _check(
+            np.isclose(tot, expected_total, rtol=1e-9),
+            f'{name}: total AT = {tot:.6f} µmol kg⁻¹, expected {expected_total:.6f}',
+        )
+
+    # 2. q is zero for every daily step whose window starts after impulse_end.
+    time_d = np.arange(2022, 2027.003, 1/360)
+    any_nonzero = False
+    for dt_i, t_cur in zip(np.diff(time_d), time_d[1:]):
+        t_off = t_cur - 2022.0
+        if t_off - dt_i >= impulse_end:   # step window lies entirely after impulse
+            q = exp.make_q(t_cur, {}, dt_i)
+            if not np.allclose(q, 0.0):
+                any_nonzero = True
+                break
+    passed &= _check(not any_nonzero, 'q is zero for all daily steps after impulse window')
+
+    # 3. AT lands only on target cell; xCO2 and CT are zero (NaOH assumption).
+    q = exp.make_q(2022.0 + 1/360, {}, 1/360)
+    at_vec = q[(m + 1):]
+    passed &= _check(at_vec[target_cell] > 0, 'target cell receives positive AT flux')
+    passed &= _check(np.allclose(at_vec[np.arange(m) != target_cell], 0.0),
+                     'non-target cells receive zero AT flux')
+    passed &= _check(q[0] == 0.0 and np.allclose(q[1:(m + 1)], 0.0),
+                     'xCO2 and CT components are zero (NaOH)')
+
+    return passed
+
+
 # ── main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
     tests = [
-        ('flatten / make_3d',      test_flatten_make3d),
-        ('get_depth_idx',          test_get_depth_idx),
-        ('inpaint_nans_2d',        test_inpaint_nans_2d),
-        ('inpaint_nans_3d',        test_inpaint_nans_3d),
-        ('inpaint_nans edge cases',test_inpaint_edge_cases),
-        ('schmidt_number',         test_schmidt_number),
-        ('calc_piston_velocity',   test_calc_piston_velocity),
-        ('build_A_matrix',         test_build_A_matrix),
-        ('write_simulation_step',  test_output_write_step),
-        ('_output_path',           test_output_path),
-        ('MLD mask logic',         test_mld_mask),
+        ('flatten / make_3d',         test_flatten_make3d),
+        ('get_depth_idx',             test_get_depth_idx),
+        ('inpaint_nans_2d',           test_inpaint_nans_2d),
+        ('inpaint_nans_3d',           test_inpaint_nans_3d),
+        ('inpaint_nans edge cases',   test_inpaint_edge_cases),
+        ('schmidt_number',            test_schmidt_number),
+        ('calc_piston_velocity',      test_calc_piston_velocity),
+        ('build_A_matrix',            test_build_A_matrix),
+        ('write_simulation_step',     test_output_write_step),
+        ('_output_path',              test_output_path),
+        ('MLD mask logic',            test_mld_mask),
+        ('ImpulseResponse.make_q',    test_impulse_make_q),
     ]
 
     results = {}

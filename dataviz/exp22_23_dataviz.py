@@ -25,7 +25,7 @@ from tqdm import tqdm
 # load model architecture
 data_path = './data/'
 # output_path = './outputs/'
-output_path = '/Volumes/LaCie/outputs/'
+output_path = '/Volumes/LaCie/outputs/exp22/'
 
 # open data associated with transport matrix
 model_data = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')

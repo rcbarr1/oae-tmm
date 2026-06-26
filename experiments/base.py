@@ -436,11 +436,10 @@ def run_cli(build_experiments, description: str = ''):
             print(f'  {i}: {exp.cfg.output_path}')
         return
 
-    if args.test:
-        experiments[0].run()
-        return
-
     if args.exp_id is None:
+        if args.test:
+            experiments[0].run()
+            return
         parser.error('--exp-id is required; use --list to see all experiments')
 
     exp_ids = _parse_exp_ids(args.exp_id)
