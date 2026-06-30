@@ -120,6 +120,7 @@ class ExperimentConfig:
     start_CDR:           Optional[float]      = None
     q_AT_mask:           Optional[np.ndarray] = None
     attrs:               Optional[dict]       = None
+    anth_in_q:           bool  = False
 
 
 class BaseExperiment(ABC):
@@ -196,6 +197,11 @@ class BaseExperiment(ABC):
         # Canth at time[0]; updated each step during run() when scenario != 'none'
         self.Canth = flatten(self._calc_canth(self.cfg.time[0], self.cfg.scenario), ocnmask)
 
+        if self.cfg.anth_in_q:
+            self.Canth_start    = self.Canth.copy()
+            self.Canth_prev     = self.Canth.copy()
+            self.xCO2_anth_prev = trace.get_atm_co2(self.cfg.scenario, self.cfg.time[0])
+
         # preindustrial pH from GLODAP CT_preind + GLODAP AT
         # (used in subclasses for CDR targeting)
         co2sys_preind = pyco2.sys(
@@ -235,7 +241,10 @@ class BaseExperiment(ABC):
         m = self.m
 
         AT_current = self.AT + c[(m+1):]
-        CT_current = self.CT_preind + c[1:(m+1)] + self.Canth
+        if self.cfg.anth_in_q:
+            CT_current = self.CT_preind + self.Canth_start + c[1:(m+1)]
+        else:
+            CT_current = self.CT_preind + c[1:(m+1)] + self.Canth
 
         co2sys = pyco2.sys(
             dic=CT_current, alkalinity=AT_current,
@@ -374,6 +383,15 @@ class BaseExperiment(ABC):
                     q = self.make_q(time_current, chem, dt)
                 else:
                     q = np.zeros(1 + 2 * self.m)
+
+                if self.cfg.anth_in_q and self.cfg.scenario != 'none':
+                    xCO2_anth_current = trace.get_atm_co2(self.cfg.scenario, time_current)
+                    # ppm → [µmol CO2 (µmol air)^-1]: multiply by 1e-6
+                    q[0]            += (xCO2_anth_current - self.xCO2_anth_prev) * 1e-6 / dt
+                    q[1:(self.m+1)] += (self.Canth - self.Canth_prev) / dt
+                    self.Canth_prev     = self.Canth.copy()
+                    self.xCO2_anth_prev = xCO2_anth_current
+
                 c = transport.solve_timestep(A, c, q, dt)
 
                 if i % self.cfg.output_freq == 0:
