@@ -32,18 +32,14 @@ https://doi.org/10.5194/essd-17-3073-2025.
 """
 
 import functools
-import os
 import warnings
 
 import numpy as np
 import xarray as xr
 from scipy.interpolate import RegularGridInterpolator
 from pyTRACE import trace
-import pyTRACE.pytrace as _pytrace
 
 from oae_tmm.grid import inpaint_nans_3d, make_3d
-
-_PYTRACE_DATADIR = os.path.join(os.path.dirname(os.path.abspath(_pytrace.__file__)), 'data')
 
 
 @functools.lru_cache(maxsize=None)
@@ -272,48 +268,3 @@ def calculate_canth(scenario, year, temperature_3d, salinity_3d, ocnmask, latitu
     canth_3d = make_3d(trace_output.canth.values, ocnmask_T).transpose([1, 0, 2])
 
     return canth_3d
-
-
-@functools.lru_cache(maxsize=None)
-def _load_co2_trajectories() -> tuple:
-    """Load unadjusted CO2Trajectories.txt from pyTRACE data dir (cached).
-
-    Returns (years, co2) where years is shape (N,) and co2 is shape (N, 9),
-    one column per scenario in the same order as interp_trace().
-    """
-    data = np.loadtxt(os.path.join(_PYTRACE_DATADIR, 'CO2Trajectories.txt'))
-    return data[:, 0], data[:, 1:]
-
-
-def get_atm_co2(scenario: str, time: float) -> float:
-    """Return unadjusted atmospheric CO2 [ppm] for a given scenario and time.
-
-    Uses CO2Trajectories.txt (true atmospheric values) rather than the
-    adjusted file that pyTRACE uses internally for Canth calculations. The
-    adjusted file reflects effective surface-ocean CO2 accounting for slow
-    equilibration; this function gives the actual atmospheric concentration,
-    appropriate for the atmospheric state variable c[0].
-
-    Parameters
-    ----------
-    scenario : str
-        Emissions scenario. One of: 'none', 'ssp119', 'ssp126', 'ssp245',
-        'ssp370', 'ssp370_lowNTCF', 'ssp434', 'ssp460', 'ssp534_OS'.
-    time : float
-        Time [decimal years CE].
-
-    Returns
-    -------
-    float
-        Atmospheric CO2 [ppm] (equivalent to µatm, the unit of c[0]).
-    """
-    scenarios = {
-        'none': 1, 'ssp119': 2, 'ssp126': 3, 'ssp245': 4, 'ssp370': 5,
-        'ssp370_lowNTCF': 6, 'ssp434': 7, 'ssp460': 8, 'ssp534_OS': 9,
-    }
-    if scenario not in scenarios:
-        raise ValueError(
-            f"Invalid scenario {scenario!r}. Must be one of: {', '.join(scenarios.keys())}"
-        )
-    years, co2 = _load_co2_trajectories()
-    return float(np.interp(time, years, co2[:, scenarios[scenario] - 1]))
