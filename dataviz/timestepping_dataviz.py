@@ -14,7 +14,11 @@ import os
 from dataviz.dataviz import broadcast_to_dataset
 import xarray as xr
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 from tqdm.auto import tqdm
 from tqdm.dask import TqdmCallback
 
@@ -33,6 +37,16 @@ longitude   = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()
 cell_volume = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy()
 model_data.close()
 rho = 1025  # seawater density [kg m-3]
+
+mpl.rcParams['font.family'] = 'Calibri'
+mpl.rcParams['font.weight'] = 'normal'
+textcolor = '#595959'
+mpl.rcParams['text.color'] = textcolor
+mpl.rcParams['axes.labelcolor'] = textcolor
+mpl.rcParams['xtick.color'] = textcolor
+mpl.rcParams['ytick.color'] = textcolor
+_fs = 13
+_display = {'Dekadal': '10-Day', 'Pentadal': '5-Day'}
 
 
 # ============================================================================ #
@@ -104,77 +118,70 @@ else:
         max_AT_cache = xr.Dataset(cache_vars).compute()
     max_AT_cache.to_netcdf(max_AT_cache_path)
 
-#%% plot max_AT: cumulative AT added
-fig = plt.figure(figsize=(5, 5), dpi=200)
-ax  = fig.gca()
-for label in max_AT_labels:
-    var = max_AT_cache[f'AT_added_cum_{label}']
-    ax.plot(var[f'time_{label}'].values, var.values, label=label)
-plt.xlabel('Year')
-plt.ylabel(r'Cumulative $A_{\mathbf{T}}$ added to mixed layer (mol)')
-plt.title('max_AT: timestepping comparison')
-plt.legend()
+#%% plot max_AT: combined 2×2 publication figure
+_panel_vars = [
+    ('AT_added_cum', r'Cumulative ${A_{\mathrm{T}}}^{\prime}$ added (Pmol)', 1e-15),
+    ('delxCO2',      r'CO$_2$ drawdown (ppm)',                               1.0),
+    ('delCT',        r"${C_{\mathrm{T}}}^{\prime}$ (Pmol)",                 1e-15),
+    ('delAT',        r"${A_{\mathrm{T}}}^{\prime}$ (Pmol)",                 1e-15),
+]
+# (lbl, x, ha): (b) floated right to avoid line overlap, rest top-left
+_panel_labels = [('(a)', 0.02, 'left'), ('(b)', 0.98, 'right'),
+                 ('(c)', 0.02, 'left'), ('(d)', 0.02, 'left')]
 
+fig, axes = plt.subplots(2, 2, figsize=(9, 9), dpi=200)
+fig.subplots_adjust(hspace=0.32, wspace=0.32)
+
+_legend_handles = []
+_legend_text    = []
+
+for ax, (var_key, ylabel, scale), (panel_lbl, px, pa) in zip(axes.flat, _panel_vars, _panel_labels):
+    for label in max_AT_labels:
+        var      = max_AT_cache[f'{var_key}_{label}']
+        time_dim = f'time_{label}'
+        line,    = ax.plot(var[time_dim].values, var.values * scale, label=label)
+        if panel_lbl == '(a)':
+            _legend_handles.append(line)
+            _legend_text.append(_display.get(label, label))
+    ax.set_xlabel('Year', fontsize=_fs)
+    ax.set_ylabel(ylabel, fontsize=_fs)
+    ax.text(px, 0.97, panel_lbl, transform=ax.transAxes,
+            fontsize=_fs, va='top', ha=pa)
+    for side in ('top', 'bottom', 'left', 'right'):
+        ax.spines[side].set_color(textcolor)
+
+fig.legend(_legend_handles, _legend_text,
+           loc='lower center', ncol=4,
+           fontsize=_fs, bbox_to_anchor=(0.5, -0.02),
+           frameon=False)
+plt.show()
+
+_tbl_vars = [
+    ('AT_added_cum', "AT' added"),
+    ('delxCO2',      'CO2 drawdown'),
+    ('delCT',        "CT'"),
+    ('delAT',        "AT'"),
+]
+_lw  = 10
+_vw  = 14
+_yr  = 2035
+_sep = '=' * (_lw + _vw * len(_tbl_vars))
+
+print(f'\nmax_AT timestepping: % of hourly response at {_yr}')
+print(_sep)
+print(f"{'':>{_lw}}" + ''.join(f"{h:>{_vw}}" for _, h in _tbl_vars))
+print('-' * (_lw + _vw * len(_tbl_vars)))
 for label in max_AT_labels:
     if label != 'Hourly':
-        var  = max_AT_cache[f'AT_added_cum_{label}']
-        pct  = (var.sel({f'time_{label}': 2035}, method='nearest') /
-                max_AT_cache['AT_added_cum_Hourly'].sel(time_Hourly=2035, method='nearest') * 100)
-        print(f'{label} : {pct:.2f}% of hourly AT added')
-
-#%% plot max_AT: delxCO2
-fig = plt.figure(figsize=(5, 5), dpi=200)
-ax  = fig.gca()
-for label in max_AT_labels:
-    var = max_AT_cache[f'delxCO2_{label}']
-    ax.plot(var[f'time_{label}'].values, var.values, label=label)
-plt.xlabel('Year')
-plt.ylabel('Change in atmospheric CO$_{2}$ (ppm)')
-plt.title('max_AT: timestepping comparison')
-plt.legend()
-
-for label in max_AT_labels:
-    if label != 'Hourly':
-        var  = max_AT_cache[f'delxCO2_{label}']
-        pct  = (var.sel({f'time_{label}': 2035}, method='nearest') /
-                max_AT_cache['delxCO2_Hourly'].sel(time_Hourly=2035, method='nearest') * 100)
-        print(f'{label} : {pct:.2f}% of hourly CO2 drawdown')
-
-#%% plot max_AT: delCT
-fig = plt.figure(figsize=(5, 5), dpi=200)
-ax  = fig.gca()
-for label in max_AT_labels:
-    var = max_AT_cache[f'delCT_{label}']
-    ax.plot(var[f'time_{label}'].values, var.values, label=label)
-plt.xlabel('Year')
-plt.ylabel(r'Change in $C_{\mathbf{T}}$ (mol)')
-plt.title('max_AT: timestepping comparison')
-plt.legend()
-
-for label in max_AT_labels:
-    if label != 'Hourly':
-        var  = max_AT_cache[f'delCT_{label}']
-        pct  = (var.sel({f'time_{label}': 2035}, method='nearest') /
-                max_AT_cache['delCT_Hourly'].sel(time_Hourly=2035, method='nearest') * 100)
-        print(f'{label} : {pct:.2f}% of hourly change in CT')
-
-#%% plot max_AT: delAT
-fig = plt.figure(figsize=(5, 5), dpi=200)
-ax  = fig.gca()
-for label in max_AT_labels:
-    var = max_AT_cache[f'delAT_{label}']
-    ax.plot(var[f'time_{label}'].values, var.values, label=label)
-plt.xlabel('Year')
-plt.ylabel(r'Change in $A_{\mathbf{T}}$ (mol)')
-plt.title('max_AT: timestepping comparison')
-plt.legend()
-
-for label in max_AT_labels:
-    if label != 'Hourly':
-        var  = max_AT_cache[f'delAT_{label}']
-        pct  = (var.sel({f'time_{label}': 2035}, method='nearest') /
-                max_AT_cache['delAT_Hourly'].sel(time_Hourly=2035, method='nearest') * 100)
-        print(f'{label} : {pct:.2f}% of hourly change in AT')
+        _row = f"{_display.get(label, label):<{_lw}}"
+        for var_key, _ in _tbl_vars:
+            val     = max_AT_cache[f'{var_key}_{label}'].sel(
+                        {f'time_{label}': _yr}, method='nearest')
+            ref_val = max_AT_cache[f'{var_key}_Hourly'].sel(
+                        time_Hourly=_yr, method='nearest')
+            _row   += f"{float(val / ref_val * 100):>{_vw - 1}.2f}%"
+        print(_row)
+print(_sep)
 
 
 # ============================================================================ #
@@ -187,17 +194,24 @@ ocn_idxs_surf = np.argwhere(surf_mask_2d == 1)
 n             = len(ocn_idxs_surf)
 test_indices  = [758, 5291, 7965, 8810]
 
-fig = plt.figure(figsize=(10, 4), dpi=200)
-ax  = fig.gca()
-ax.pcolormesh(longitude, latitude, surf_mask_2d, cmap='Blues', alpha=0.4)
+data_crs = ccrs.PlateCarree()
+map_proj = ccrs.EqualEarth(central_longitude=200)
+
+fig, ax = plt.subplots(1, 1, figsize=(10, 4), dpi=200,
+                       subplot_kw={'projection': map_proj})
+ax.set_global()
+ax.set_facecolor('#b0cfe0')
+ax.add_feature(cfeature.LAND, facecolor='lightgray', zorder=1)
+ax.coastlines(linewidth=0.5)
 for cell_num, color in zip(test_indices, ['C0', 'C1', 'C2', 'C3']):
     lat_idx, lon_idx = ocn_idxs_surf[cell_num, 0], ocn_idxs_surf[cell_num, 1]
     ax.scatter(longitude[lon_idx], latitude[lat_idx], color=color, s=60, zorder=5,
-               label=f'cell {cell_num}')
-ax.set_xlabel('Longitude (°E)')
-ax.set_ylabel('Latitude (°N)')
-ax.set_title('Impulse response: --test cell locations')
-ax.legend()
+               label=f'Cell {cell_num}', transform=data_crs)
+ax.legend(fontsize=_fs, frameon=False, loc='lower center',
+          bbox_to_anchor=(0.5, -0.01), ncol=len(test_indices),
+          bbox_transform=fig.transFigure)
+plt.tight_layout()
+plt.show()
 
 ir_t_names = ['annually', 'monthly', 'dekadal', 'pentadal', 'daily']
 ir_labels  = ['Annual',   'Monthly', 'Dekadal', 'Pentadal', 'Daily']
@@ -262,19 +276,63 @@ else:
         ir_cache = xr.Dataset(cache_vars).compute()
     ir_cache.to_netcdf(ir_cache_path)
 
-#%% plot impulse_response: cumulative AT added (four-panel)
-fig, axes = plt.subplots(2, 2, figsize=(10, 10), dpi=200)
-for ax, cell_num in zip(axes.flat, ir_cell_nums):
-    for label in ir_labels:
-        var      = ir_cache[f'AT_added_cum_{label}_{cell_num}']
-        time_dim = f'time_{label}_{cell_num}'
-        ax.plot(var[time_dim].values, var.values, label=label)
-    ax.set_xlabel('Year')
-    ax.set_ylabel(r'Cumulative $A_{\mathbf{T}}$ added (mol)')
-    ax.set_title(f'Cell {cell_num}')
-    ax.legend()
-fig.suptitle('Impulse response: AT added — timestepping comparison')
-plt.tight_layout()
+#%% plot impulse_response: combined 4×4 publication figure
+# rows = variables (AT added, CO2, CT, AT), columns = cells
+_ir_row_vars = [
+    ('AT_added_cum', r'Cumulative ${A_{\mathrm{T}}}^{\prime}$ added (Pmol)', 1e-15),
+    ('delxCO2',      r'CO$_2$ drawdown (ppm)',                               1.0),
+    ('delCT',        r"${C_{\mathrm{T}}}^{\prime}$ (Pmol)",                 1e-15),
+    ('delAT',        r"${A_{\mathrm{T}}}^{\prime}$ (Pmol)",                 1e-15),
+]
+_n_rows = len(_ir_row_vars)
+_n_cols = len(ir_cell_nums)
+_ir_linestyles = {
+    'Annual':   '-',
+    'Monthly':  '--',
+    'Dekadal':  ':',
+    'Pentadal': '-.',
+    'Daily':    (0, (3, 1, 1, 1)),
+}
+
+fig, axes = plt.subplots(_n_rows, _n_cols,
+                         figsize=(2.6 * _n_cols, 2.6 * _n_rows),
+                         dpi=200, squeeze=False)
+fig.subplots_adjust(bottom=0.08, hspace=0.18, wspace=0.18)
+
+_ir_legend_handles = []
+_ir_legend_text    = []
+
+for row, (var_key, row_ylabel, scale) in enumerate(_ir_row_vars):
+    for col, cell_num in enumerate(ir_cell_nums):
+        ax = axes[row, col]
+        for label in ir_labels:
+            var      = ir_cache[f'{var_key}_{label}_{cell_num}']
+            time_dim = f'time_{label}_{cell_num}'
+            line,    = ax.plot(var[time_dim].values, var.values * scale, label=label,
+                              linestyle=_ir_linestyles[label])
+            if row == 0 and col == 0:
+                _ir_legend_handles.append(line)
+                _ir_legend_text.append(_display.get(label, label))
+        if row == 0:
+            ax.set_title(f'Cell {cell_num}', fontsize=_fs, color=textcolor)
+        if col == 0:
+            ax.set_ylabel(row_ylabel, fontsize=_fs)
+        else:
+            ax.set_yticklabels([])
+        if row == _n_rows - 1:
+            ax.set_xlabel('Year', fontsize=_fs)
+            ax.tick_params(axis='x', rotation=45)
+        else:
+            ax.set_xticklabels([])
+        ax.xaxis.set_major_locator(MultipleLocator(1))
+        for side in ('top', 'bottom', 'left', 'right'):
+            ax.spines[side].set_color(textcolor)
+
+fig.legend(_ir_legend_handles, _ir_legend_text,
+           loc='lower center', ncol=len(ir_labels),
+           fontsize=_fs, bbox_to_anchor=(0.5, -0.02),
+           frameon=False)
+plt.show()
 
 _col_w  = 12
 _ref    = 'Daily'
@@ -283,7 +341,7 @@ print('\nImpulse response: AT added (% of daily at 2027)')
 print(_header)
 for label in ir_labels:
     if label != _ref:
-        _row = f"{label:<12}"
+        _row = f"{_display.get(label, label):<12}"
         for cell_num in ir_cell_nums:
             ref_val = ir_cache[f'AT_added_cum_{_ref}_{cell_num}'].sel(
                 {f'time_{_ref}_{cell_num}': 2027}, method='nearest').values
@@ -292,25 +350,11 @@ for label in ir_labels:
             _row += f"{val / ref_val * 100:>{_col_w}.2f}%"
         print(_row)
 
-#%% plot impulse_response: delxCO2 (four-panel)
-fig, axes = plt.subplots(2, 2, figsize=(10, 10), dpi=200)
-for ax, cell_num in zip(axes.flat, ir_cell_nums):
-    for label in ir_labels:
-        var      = ir_cache[f'delxCO2_{label}_{cell_num}']
-        time_dim = f'time_{label}_{cell_num}'
-        ax.plot(var[time_dim].values, var.values, label=label)
-    ax.set_xlabel('Year')
-    ax.set_ylabel(r'Change in atmospheric CO$_{2}$ (ppm)')
-    ax.set_title(f'Cell {cell_num}')
-    ax.legend()
-fig.suptitle('Impulse response: CO$_2$ drawdown — timestepping comparison')
-plt.tight_layout()
-
 print('\nImpulse response: CO2 drawdown (% of daily at 2027)')
 print(_header)
 for label in ir_labels:
     if label != _ref:
-        _row = f"{label:<12}"
+        _row = f"{_display.get(label, label):<12}"
         for cell_num in ir_cell_nums:
             ref_val = ir_cache[f'delxCO2_{_ref}_{cell_num}'].sel(
                 {f'time_{_ref}_{cell_num}': 2027}, method='nearest').values
@@ -319,25 +363,11 @@ for label in ir_labels:
             _row += f"{val / ref_val * 100:>{_col_w}.2f}%"
         print(_row)
 
-#%% plot impulse_response: delCT (four-panel)
-fig, axes = plt.subplots(2, 2, figsize=(10, 10), dpi=200)
-for ax, cell_num in zip(axes.flat, ir_cell_nums):
-    for label in ir_labels:
-        var      = ir_cache[f'delCT_{label}_{cell_num}']
-        time_dim = f'time_{label}_{cell_num}'
-        ax.plot(var[time_dim].values, var.values, label=label)
-    ax.set_xlabel('Year')
-    ax.set_ylabel(r'Change in $C_{\mathbf{T}}$ (mol)')
-    ax.set_title(f'Cell {cell_num}')
-    ax.legend()
-fig.suptitle(r'Impulse response: $C_T$ change — timestepping comparison')
-plt.tight_layout()
-
 print('\nImpulse response: CT change (% of daily at 2027)')
 print(_header)
 for label in ir_labels:
     if label != _ref:
-        _row = f"{label:<12}"
+        _row = f"{_display.get(label, label):<12}"
         for cell_num in ir_cell_nums:
             ref_val = ir_cache[f'delCT_{_ref}_{cell_num}'].sel(
                 {f'time_{_ref}_{cell_num}': 2027}, method='nearest').values
@@ -346,25 +376,11 @@ for label in ir_labels:
             _row += f"{val / ref_val * 100:>{_col_w}.2f}%"
         print(_row)
 
-#%% plot impulse_response: delAT (four-panel)
-fig, axes = plt.subplots(2, 2, figsize=(10, 10), dpi=200)
-for ax, cell_num in zip(axes.flat, ir_cell_nums):
-    for label in ir_labels:
-        var      = ir_cache[f'delAT_{label}_{cell_num}']
-        time_dim = f'time_{label}_{cell_num}'
-        ax.plot(var[time_dim].values, var.values, label=label)
-    ax.set_xlabel('Year')
-    ax.set_ylabel(r'Change in $A_{\mathbf{T}}$ (mol)')
-    ax.set_title(f'Cell {cell_num}')
-    ax.legend()
-fig.suptitle(r'Impulse response: $A_T$ change — timestepping comparison')
-plt.tight_layout()
-
 print('\nImpulse response: AT change (% of daily at 2027)')
 print(_header)
 for label in ir_labels:
     if label != _ref:
-        _row = f"{label:<12}"
+        _row = f"{_display.get(label, label):<12}"
         for cell_num in ir_cell_nums:
             ref_val = ir_cache[f'delAT_{_ref}_{cell_num}'].sel(
                 {f'time_{_ref}_{cell_num}': 2027}, method='nearest').values
