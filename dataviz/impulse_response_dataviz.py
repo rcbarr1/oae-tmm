@@ -64,7 +64,7 @@ def is_valid(ds):
     """
     if float(ds.time.values[-1]) != YEAR_15YR:
         return False
-    if np.any(np.isnan(ds['delCT'].isel(time=-1).values)):
+    if not np.any(np.isfinite(ds['delCT'].isel(time=-1).values)):
         return False
     return True
 
@@ -88,7 +88,11 @@ def _load_final_cache():
     with xr.open_dataset(final_cache_path) as ds:
         if not all(v in ds for v in expected):
             return None
-        return {v: ds[v].values for v in expected}
+        cache = {v: ds[v].values for v in expected}
+        if all(np.all(np.isnan(v)) for v in cache.values()):
+            print('  Final cache exists but is all-NaN — recomputing')
+            return None
+        return cache
 
 
 def _compute_scenario(scenario):
@@ -139,7 +143,10 @@ def _load_or_compute_scenario(scenario):
     p15 = _npy_path(scenario, '15yr')
 
     if os.path.exists(p5) and os.path.exists(p15):
-        return np.load(p5), np.load(p15)
+        eta_5yr, eta_15yr = np.load(p5), np.load(p15)
+        if np.any(np.isfinite(eta_5yr)) or np.any(np.isfinite(eta_15yr)):
+            return eta_5yr, eta_15yr
+        print(f'  [{scenario}] cached .npy files are all-NaN — recomputing')
 
     eta_5yr, eta_15yr = _compute_scenario(scenario)
     np.save(p5,  eta_5yr)
@@ -198,15 +205,15 @@ for row, (horizon, _) in enumerate(_horizons):
         panel = _panel_ids[row * 3 + col]
 
         ax.set_global()
-        ax.set_facecolor('#b0cfe0')
-        ax.add_feature(cfeature.LAND, facecolor='lightgray', zorder=1)
-        ax.coastlines(linewidth=0.5)
 
         im = ax.pcolormesh(
             longitude, latitude, data,
             cmap='viridis', vmin=_vmin, vmax=_vmax,
-            transform=data_crs,
+            transform=data_crs, zorder=1,
         )
+
+        ax.add_feature(cfeature.LAND, facecolor='lightgray', zorder=2)
+        ax.coastlines(linewidth=0.5, zorder=3)
 
         ax.text(0.02, 0.97, panel,
                 transform=ax.transAxes,
