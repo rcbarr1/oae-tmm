@@ -36,9 +36,10 @@ cell_volume = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_n
 model_data.close()
 rho = 1025  # seawater density [kg m-3]
 
-mpl.rcParams['font.family'] = 'Calibri'
-mpl.rcParams['font.weight'] = 'normal'
-textcolor = '#595959'
+fontweight = 'normal'
+textcolor = '#000000'
+mpl.rcParams['font.family']     = 'Calibri'
+mpl.rcParams['font.weight']     = fontweight
 mpl.rcParams['text.color']      = textcolor
 mpl.rcParams['axes.labelcolor'] = textcolor
 mpl.rcParams['xtick.color']     = textcolor
@@ -116,6 +117,7 @@ ax.set_xlabel('Year', fontsize=_fs)
 ax.set_ylabel(r'Cumulative $A_{\mathrm{T}}$ added to mixed layer (mol)', fontsize=_fs)
 for side in ('top', 'bottom', 'left', 'right'):
     ax.spines[side].set_color(textcolor)
+ax.tick_params(labelsize=_fs)
 ax.legend(fontsize=_fs, frameon=False)
 
 #%% plot change in atmospheric CO2 over time for timestepping comparison
@@ -130,6 +132,7 @@ ax.set_xlabel('Year', fontsize=_fs)
 ax.set_ylabel(r'Change in atmospheric CO$_{2}$ (ppm)', fontsize=_fs)
 for side in ('top', 'bottom', 'left', 'right'):
     ax.spines[side].set_color(textcolor)
+ax.tick_params(labelsize=_fs)
 ax.legend(fontsize=_fs, frameon=False)
 
 #%% plot change in CT over time for timestepping comparison
@@ -144,6 +147,7 @@ ax.set_xlabel('Year', fontsize=_fs)
 ax.set_ylabel(r'Change in $C_{\mathrm{T}}$ (mol)', fontsize=_fs)
 for side in ('top', 'bottom', 'left', 'right'):
     ax.spines[side].set_color(textcolor)
+ax.tick_params(labelsize=_fs)
 ax.legend(fontsize=_fs, frameon=False)
 
 #%% plot change in AT over time for timestepping comparison
@@ -158,6 +162,7 @@ ax.set_xlabel('Year', fontsize=_fs)
 ax.set_ylabel(r'Change in $A_{\mathrm{T}}$ (mol)', fontsize=_fs)
 for side in ('top', 'bottom', 'left', 'right'):
     ax.spines[side].set_color(textcolor)
+ax.tick_params(labelsize=_fs)
 ax.legend(fontsize=_fs, frameon=False)
 
 # %% four-panel full-ocean totals figure for paper
@@ -182,6 +187,9 @@ axes[0][0].set_xlim([2020, 2100])
 axes[0][0].legend(fontsize=_fs, frameon=False)
 for side in ('top', 'bottom', 'left', 'right'):
     axes[0][0].spines[side].set_color(textcolor)
+axes[0][0].tick_params(labelsize=_fs)
+axes[0][0].text(0.02, 0.97, '(a)', transform=axes[0][0].transAxes,
+                fontsize=_fs, va='top', ha='left', color=textcolor)
 
 for label, color in zip(labels, colors):
     time = cache[f'delCT_{label}'][f'time_{label}'].values
@@ -194,17 +202,23 @@ axes[0][1].set_ylabel(r'OAE efficiency: ${C_{\mathrm{T}}}^{\prime}$ / ${A_{\math
 axes[0][1].set_xlim([2020, 2100])
 for side in ('top', 'bottom', 'left', 'right'):
     axes[0][1].spines[side].set_color(textcolor)
+axes[0][1].tick_params(labelsize=_fs)
+axes[0][1].text(0.02, 0.97, '(b)', transform=axes[0][1].transAxes,
+                fontsize=_fs, va='top', ha='left', color=textcolor)
 
 for label, color in zip(labels, colors):
-    time = cache[f'delxCO2_{label}'][f'time_{label}'].values
+    time = cache[f'delCT_{label}'][f'time_{label}'].values
     axes[1][0].plot(np.concatenate([pre_time, time]),
-                    np.concatenate([pre_zeros, cache[f'delxCO2_{label}'].values]),
+                    np.concatenate([pre_zeros, cache[f'delCT_{label}'].values]),
                     label=label, c=color)
 axes[1][0].set_xlabel('Year', fontsize=_fs)
-axes[1][0].set_ylabel(r'Change in atmospheric CO$_2$ (ppm)', fontsize=_fs)
+axes[1][0].set_ylabel(r'Change in $C_{\mathrm{T}}$ (mol)', fontsize=_fs)
 axes[1][0].set_xlim([2020, 2100])
 for side in ('top', 'bottom', 'left', 'right'):
     axes[1][0].spines[side].set_color(textcolor)
+axes[1][0].tick_params(labelsize=_fs)
+axes[1][0].text(0.02, 0.97, '(c)', transform=axes[1][0].transAxes,
+                fontsize=_fs, va='top', ha='left', color=textcolor)
 
 for label, scenario, color in zip(labels, scenarios, colors):
     time = cache[f'delxCO2_{label}'][f'time_{label}'].values
@@ -217,6 +231,9 @@ axes[1][1].set_ylabel(r'Atmospheric CO$_2$ (ppm)', fontsize=_fs)
 axes[1][1].set_xlim([2020, 2100])
 for side in ('top', 'bottom', 'left', 'right'):
     axes[1][1].spines[side].set_color(textcolor)
+axes[1][1].tick_params(labelsize=_fs)
+axes[1][1].text(0.02, 0.97, '(d)', transform=axes[1][1].transAxes,
+                fontsize=_fs, va='top', ha='left', color=textcolor)
 
 plt.tight_layout()
 
@@ -260,11 +277,13 @@ co2sys_2050 = pyco2.sys(dic=flatten(CT_2050_3d, ocnmask),
                         total_silicate=silicate, total_phosphate=phosphate)
 pH_2050     = co2sys_2050['pH']
 RC_2050     = co2sys_2050['revelle_factor']
-omegaC_2050 = co2sys_2050['saturation_calcite']
+omegaA_2050 = co2sys_2050['saturation_aragonite']
+pCO2_2050   = co2sys_2050['pCO2']
 
 pH_2050_3d     = make_3d(pH_2050, ocnmask)
 RC_2050_3d     = make_3d(RC_2050, ocnmask)
-omegaC_2050_3d = make_3d(omegaC_2050, ocnmask)
+omegaA_2050_3d = make_3d(omegaA_2050, ocnmask)
+pCO2_2050_3d   = make_3d(pCO2_2050, ocnmask)
 
 co2sys_2100 = pyco2.sys(dic=flatten(CT_2100_3d, ocnmask),
                         alkalinity=flatten(AT_3d, ocnmask),
@@ -272,11 +291,13 @@ co2sys_2100 = pyco2.sys(dic=flatten(CT_2100_3d, ocnmask),
                         total_silicate=silicate, total_phosphate=phosphate)
 pH_2100     = co2sys_2100['pH']
 RC_2100     = co2sys_2100['revelle_factor']
-omegaC_2100 = co2sys_2100['saturation_calcite']
+omegaA_2100 = co2sys_2100['saturation_aragonite']
+pCO2_2100   = co2sys_2100['pCO2']
 
 pH_2100_3d     = make_3d(pH_2100, ocnmask)
 RC_2100_3d     = make_3d(RC_2100, ocnmask)
-omegaC_2100_3d = make_3d(omegaC_2100, ocnmask)
+omegaA_2100_3d = make_3d(omegaA_2100, ocnmask)
+pCO2_2100_3d   = make_3d(pCO2_2100, ocnmask)
 
 #%% calculate pH (max OAE) on OCIM grid in 2050 and 2100 using SSP2-4.5
 
@@ -299,11 +320,13 @@ co2sys_OAE_2050 = pyco2.sys(dic=flatten(CT_OAE_2050_3d, ocnmask),
                             total_silicate=silicate, total_phosphate=phosphate)
 pH_OAE_2050       = co2sys_OAE_2050['pH']
 RC_OAE_2050       = co2sys_OAE_2050['revelle_factor']
-omegaC_OAE_2050   = co2sys_OAE_2050['saturation_calcite']
+omegaA_OAE_2050   = co2sys_OAE_2050['saturation_aragonite']
+pCO2_OAE_2050     = co2sys_OAE_2050['pCO2']
 
 pH_OAE_2050_3d     = make_3d(pH_OAE_2050, ocnmask)
 RC_OAE_2050_3d     = make_3d(RC_OAE_2050, ocnmask)
-omegaC_OAE_2050_3d = make_3d(omegaC_OAE_2050, ocnmask)
+omegaA_OAE_2050_3d = make_3d(omegaA_OAE_2050, ocnmask)
+pCO2_OAE_2050_3d   = make_3d(pCO2_OAE_2050, ocnmask)
 
 co2sys_OAE_2100 = pyco2.sys(dic=flatten(CT_OAE_2100_3d, ocnmask),
                             alkalinity=flatten(AT_OAE_2100_3d, ocnmask),
@@ -311,21 +334,25 @@ co2sys_OAE_2100 = pyco2.sys(dic=flatten(CT_OAE_2100_3d, ocnmask),
                             total_silicate=silicate, total_phosphate=phosphate)
 pH_OAE_2100       = co2sys_OAE_2100['pH']
 RC_OAE_2100       = co2sys_OAE_2100['revelle_factor']
-omegaC_OAE_2100   = co2sys_OAE_2100['saturation_calcite']
+omegaA_OAE_2100   = co2sys_OAE_2100['saturation_aragonite']
+pCO2_OAE_2100     = co2sys_OAE_2100['pCO2']
 
 pH_OAE_2100_3d     = make_3d(pH_OAE_2100, ocnmask)
 RC_OAE_2100_3d     = make_3d(RC_OAE_2100, ocnmask)
-omegaC_OAE_2100_3d = make_3d(omegaC_OAE_2100, ocnmask)
+omegaA_OAE_2100_3d = make_3d(omegaA_OAE_2100, ocnmask)
+pCO2_OAE_2100_3d   = make_3d(pCO2_OAE_2100, ocnmask)
 
 del_pH_2050_3d     = pH_OAE_2050_3d - pH_2050_3d
 del_RC_2050_3d     = RC_OAE_2050_3d - RC_2050_3d
-del_omegaC_2050_3d = omegaC_OAE_2050_3d - omegaC_2050_3d
+del_omegaA_2050_3d = omegaA_OAE_2050_3d - omegaA_2050_3d
+del_pCO2_2050_3d   = pCO2_OAE_2050_3d - pCO2_2050_3d
 
 del_pH_2100_3d     = pH_OAE_2100_3d - pH_2100_3d
 del_RC_2100_3d     = RC_OAE_2100_3d - RC_2100_3d
-del_omegaC_2100_3d = omegaC_OAE_2100_3d - omegaC_2100_3d
+del_omegaA_2100_3d = omegaA_OAE_2100_3d - omegaA_2100_3d
+del_pCO2_2100_3d   = pCO2_OAE_2100_3d - pCO2_2100_3d
 
-# %% pH changes visualization figure (SSP2-4.5, max OAE vs. no OAE)
+# %% carbonate chemistry changes visualization figures (SSP2-4.5, max OAE vs. no OAE)
 # rows: 2050 (top), 2100 (bottom)
 # cols: surface map | Pacific (209°E) | Atlantic (335°E) | Indian Ocean (91°E)
 
@@ -333,53 +360,14 @@ pac_idx, atl_idx, ind_idx = 104, 167, 45
 section_lons = [longitude[pac_idx], longitude[atl_idx], longitude[ind_idx]]
 section_lat_lims = [(59, -75), (67, -76), (21, -66)]  # (north, south) to match N-to-S latitude axis
 
-del_pH_by_year = {
-    2050: [del_pH_2050_3d[:, :, 0],
-           del_pH_2050_3d[:, pac_idx, :],
-           del_pH_2050_3d[:, atl_idx, :],
-           del_pH_2050_3d[:, ind_idx, :]],
-    2100: [del_pH_2100_3d[:, :, 0],
-           del_pH_2100_3d[:, pac_idx, :],
-           del_pH_2100_3d[:, atl_idx, :],
-           del_pH_2100_3d[:, ind_idx, :]],
-}
-
-vmax = max(np.nanmax(np.abs(d)) for row in del_pH_by_year.values() for d in row)
-
-sec_col_titles = ['Pacific (209°E)', 'Atlantic (335°E)', 'Indian Ocean (91°E)']
-
 data_crs = ccrs.PlateCarree()
 map_proj = ccrs.EqualEarth(central_longitude=200)
 
-# figure 1: surface maps (2050 and 2100 side by side)
-fig1, map_axes = plt.subplots(1, 2, figsize=(14, 4), dpi=200,
-                              subplot_kw={'projection': map_proj})
-
-for col_idx, year in enumerate([2050, 2100]):
-    map_axes[col_idx].set_global()
-    map_axes[col_idx].set_facecolor('#b0cfe0')
-    im = map_axes[col_idx].pcolormesh(longitude, latitude, del_pH_by_year[year][0],
-                                      cmap='RdBu', vmin=-vmax, vmax=vmax,
-                                      transform=data_crs)
-    map_axes[col_idx].add_feature(cfeature.LAND, facecolor='lightgray', zorder=1)
-    map_axes[col_idx].coastlines(linewidth=0.5)
-    for sec_lon, lat_lim in zip(section_lons, section_lat_lims):
-        map_axes[col_idx].plot([sec_lon, sec_lon], list(lat_lim), color='yellow', linewidth=0.8,
-                               transform=data_crs)
-    map_axes[col_idx].set_title(f'{year}', fontsize=_fs, color=textcolor)
-
-plt.tight_layout()
-fig1.subplots_adjust(right=0.88)
-cbar_ax = fig1.add_axes([0.90, 0.1, 0.015, 0.8])
-cbar1   = fig1.colorbar(im, cax=cbar_ax, label=r'$\mathrm{pH}^{\prime}$ (max OAE − no OAE)')
-cbar1.ax.yaxis.label.set_color(textcolor)
-cbar1.ax.tick_params(colors=textcolor)
-
-# figure 3: surface maps of ΔpH, ΔRevelle factor, ΔΩ_C (3 rows × 2 cols)
+# figure 1: surface maps of ΔpH, ΔRevelle factor, ΔΩ_C (3 rows × 2 cols)
 surface_vars = [
-    (r'$\mathrm{pH}^{\prime}$',             del_pH_2050_3d[:, :, 0],     del_pH_2100_3d[:, :, 0]),
-    (r'Revelle factor$^{\prime}$',           del_RC_2050_3d[:, :, 0],     del_RC_2100_3d[:, :, 0]),
-    (r'$\Omega_C^{\prime}$',                 del_omegaC_2050_3d[:, :, 0], del_omegaC_2100_3d[:, :, 0]),
+    (r'$\mathrm{pH}^{\prime}$', del_pH_2050_3d[:, :, 0],     del_pH_2100_3d[:, :, 0]),
+    (r'${R_C}^{\prime}$',       del_RC_2050_3d[:, :, 0],     del_RC_2100_3d[:, :, 0]),
+    (r'${\Omega_A}^{\prime}$',  del_omegaA_2050_3d[:, :, 0], del_omegaA_2100_3d[:, :, 0]),
 ]
 
 fig3, axes3 = plt.subplots(3, 2, figsize=(12, 9), dpi=200,
@@ -401,6 +389,9 @@ for row_idx, (var_label, data_2050, data_2100) in enumerate(surface_vars):
                                          linewidth=0.8, transform=data_crs)
         if row_idx == 0:
             axes3[row_idx, col_idx].set_title(str(year), fontsize=_fs, color=textcolor)
+        axes3[row_idx, col_idx].text(0.02, 0.97, f'({chr(ord("a") + row_idx * 2 + col_idx)})',
+                                     transform=axes3[row_idx, col_idx].transAxes,
+                                     fontsize=_fs, va='top', ha='left', color=textcolor)
     im_list.append((im, var_label))
 
 plt.tight_layout()
@@ -408,19 +399,34 @@ fig3.subplots_adjust(right=0.85, hspace=0.35)
 for row_idx, (im, var_label) in enumerate(im_list):
     ax_pos  = axes3[row_idx, 1].get_position()
     cbar_ax = fig3.add_axes([0.87, ax_pos.y0, 0.015, ax_pos.height])
-    cbar3   = fig3.colorbar(im, cax=cbar_ax, label=f'{var_label} (max OAE − no OAE)')
+    cbar3   = fig3.colorbar(im, cax=cbar_ax)
+    cbar3.set_label(f'{var_label} (max OAE − no OAE)', fontsize=_fs)
     cbar3.ax.yaxis.label.set_color(textcolor)
-    cbar3.ax.tick_params(colors=textcolor)
+    cbar3.ax.tick_params(colors=textcolor, labelsize=_fs)
 
 sec_cmap = plt.cm.RdBu.copy()
 sec_cmap.set_bad('lightgray')
 
-# figure 2: interior sections (2 rows × 3 cols)
+# figure 2: pCO2 interior sections (3 rows × 3 cols)
 fig2, sec_axes = plt.subplots(2, 3, figsize=(12, 7), dpi=200)
+
+sec_col_titles = ['Pacific (209°E)', 'Atlantic (335°E)', 'Indian Ocean (91°E)']
+del_pCO2_by_year = {
+    2050: [del_pCO2_2050_3d[:, :, 0],
+           del_pCO2_2050_3d[:, pac_idx, :],
+           del_pCO2_2050_3d[:, atl_idx, :],
+           del_pCO2_2050_3d[:, ind_idx, :]],
+    2100: [del_pCO2_2100_3d[:, :, 0],
+           del_pCO2_2100_3d[:, pac_idx, :],
+           del_pCO2_2100_3d[:, atl_idx, :],
+           del_pCO2_2100_3d[:, ind_idx, :]],
+}
+
+vmax = max(np.nanmax(np.abs(d)) for row in del_pCO2_by_year.values() for d in row)
 
 for row_idx, year in enumerate([2050, 2100]):
     for col_idx, (section, lat_lim, title) in enumerate(
-            zip(del_pH_by_year[year][1:], section_lat_lims, sec_col_titles)):
+            zip(del_pCO2_by_year[year][1:], section_lat_lims, sec_col_titles)):
         im = sec_axes[row_idx, col_idx].pcolormesh(latitude, depth, section.T,
                                                    cmap=sec_cmap, vmin=-vmax, vmax=vmax)
         sec_axes[row_idx, col_idx].set_xlabel('Latitude (°N)', fontsize=_fs)
@@ -429,15 +435,20 @@ for row_idx, year in enumerate([2050, 2100]):
         sec_axes[row_idx, col_idx].set_ylim(0, 2500)
         sec_axes[row_idx, col_idx].invert_yaxis()
         sec_axes[row_idx, col_idx].set_title(f'{title}, {year}', fontsize=_fs, color=textcolor)
+        sec_axes[row_idx, col_idx].text(0.02, 0.97, f'({chr(ord("a") + row_idx * 3 + col_idx)})',
+                                        transform=sec_axes[row_idx, col_idx].transAxes,
+                                        fontsize=_fs, va='top', ha='left', color=textcolor)
         for side in ('top', 'bottom', 'left', 'right'):
             sec_axes[row_idx, col_idx].spines[side].set_color(textcolor)
+        sec_axes[row_idx, col_idx].tick_params(labelsize=_fs)
 
 plt.tight_layout()
 fig2.subplots_adjust(right=0.87)
 cbar_ax = fig2.add_axes([0.89, 0.1, 0.015, 0.8])
-cbar2   = fig2.colorbar(im, cax=cbar_ax, label=r'$\mathrm{pH}^{\prime}$ (max OAE − no OAE)')
+cbar2   = fig2.colorbar(im, cax=cbar_ax)
+cbar2.set_label(r'$\mathrm{pCO_2}^{\prime}$ (max OAE − no OAE)', fontsize=_fs)
 cbar2.ax.yaxis.label.set_color(textcolor)
-cbar2.ax.tick_params(colors=textcolor)
+cbar2.ax.tick_params(colors=textcolor, labelsize=_fs)
 
 
 #%%

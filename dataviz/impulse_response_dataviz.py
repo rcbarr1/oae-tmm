@@ -26,9 +26,10 @@ data_path = './data/'
 ir_path   = '/Volumes/LaCie/outputs/impulse_response/'
 ir_date   = '2026-07-01'  # set to the tag date used when production runs were submitted
 
-mpl.rcParams['font.family'] = 'Calibri'
-mpl.rcParams['font.weight'] = 'normal'
-textcolor = '#595959'
+fontweight = 'normal'
+textcolor = '#000000'
+mpl.rcParams['font.family']     = 'Calibri'
+mpl.rcParams['font.weight']     = fontweight
 mpl.rcParams['text.color']      = textcolor
 mpl.rcParams['axes.labelcolor'] = textcolor
 mpl.rcParams['xtick.color']     = textcolor
@@ -189,7 +190,7 @@ map_proj = ccrs.EqualEarth(central_longitude=200)
 
 fig, axes = plt.subplots(
     2, 3,
-    figsize=(14, 6),
+    figsize=(12, 4.5),
     dpi=200,
     subplot_kw={'projection': map_proj},
 )
@@ -215,7 +216,7 @@ for row, (horizon, _) in enumerate(_horizons):
         ax.add_feature(cfeature.LAND, facecolor='lightgray', zorder=2)
         ax.coastlines(linewidth=0.5, zorder=3)
 
-        ax.text(0.02, 0.97, panel,
+        ax.text(0.01, 0.97, panel,
                 transform=ax.transAxes,
                 fontsize=_fs, va='top', ha='left', color=textcolor)
 
@@ -223,7 +224,7 @@ for row, (horizon, _) in enumerate(_horizons):
             spine.set_color(textcolor)
 
         if row == 0:
-            ax.set_title(_scenario_labels[scenario], fontsize=_fs, color=textcolor, pad=6)
+            ax.set_title(_scenario_labels[scenario], fontsize=_fs, fontweight=fontweight, color=textcolor, pad=6)
 
         if col == 0:
             ax.text(-0.05, 0.5, _row_labels[row],
@@ -233,10 +234,10 @@ for row, (horizon, _) in enumerate(_horizons):
 
 cbar_ax = fig.add_axes([0.90, 0.15, 0.015, 0.70])
 cbar    = fig.colorbar(im, cax=cbar_ax)
-cbar.set_label(r'$\eta$ (mol C$_{\mathrm{T}}$ / mol A$_{\mathrm{T}}$)', fontsize=_fs)
+cbar.set_label(r'$\eta$ (mol ${C_{\mathrm{T}}}^{\prime}$ / mol ${A_{\mathrm{T}}}^{\prime}$)', fontsize=_fs, fontweight=fontweight)
 cbar.set_ticks(np.linspace(_vmin, _vmax, 6))
 cbar.ax.yaxis.label.set_color(textcolor)
-cbar.ax.tick_params(colors=textcolor)
+cbar.ax.tick_params(colors=textcolor, labelsize=_fs)
 
 plt.show()
 
