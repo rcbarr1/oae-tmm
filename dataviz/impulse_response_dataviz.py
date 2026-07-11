@@ -14,6 +14,8 @@ import glob
 import os
 
 from dataviz.dataviz import broadcast_to_dataset
+from oae_tmm.grid import flatten
+from oae_tmm.trace import interp_trace
 import xarray as xr
 import numpy as np
 import matplotlib as mpl
@@ -21,9 +23,11 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from tqdm.auto import tqdm
+from geopy.distance import geodesic
 
 data_path = './data/'
 ir_path   = '/Volumes/LaCie/outputs/impulse_response/'
+ir_path   = './outputs/'
 ir_date   = '2026-07-01'  # set to the tag date used when production runs were submitted
 
 fontweight = 'normal'
@@ -40,6 +44,7 @@ model_data  = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc
 ocnmask     = model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_numpy()
 latitude    = model_data['tlat'].isel(depth=0, longitude=0).to_numpy()
 longitude   = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()
+depth       = model_data['tz'].isel(longitude=0, latitude=0).to_numpy()
 cell_volume = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy()
 model_data.close()
 rho = 1025  # seawater density [kg m-3]
@@ -52,9 +57,7 @@ YEAR_5YR  = 2027   # 5 years after CDR start (2022)
 YEAR_15YR = 2037   # 15 years after CDR start
 
 
-# ============================================================================ #
-#%%  VALIDITY CHECK                                                              #
-# ============================================================================ #
+#%% validity check
 
 def is_valid(ds):
     """Return True if ds ran to completion and has no corrupt final state.
@@ -70,9 +73,7 @@ def is_valid(ds):
     return True
 
 
-# ============================================================================ #
-#%%  CACHE SYSTEM                                                               #
-# ============================================================================ #
+#%% compute or load cached time series
 
 final_cache_path = ir_path + f'ir_efficiency_cache_{ir_date}.nc'
 
@@ -172,9 +173,7 @@ if eta_cache is None:
     ds_out.to_netcdf(final_cache_path)
 
 
-# ============================================================================ #
-#%%  FIGURE: 2×3 GLOBAL EFFICIENCY MAP                                          #
-# ============================================================================ #
+#%% figure: 2×3 global efficiency map
 
 _scenario_labels = {
     'none':      'No SSP',
@@ -241,4 +240,63 @@ cbar.ax.tick_params(colors=textcolor, labelsize=_fs)
 
 plt.show()
 
-# %%
+#%%  statistics
+
+# ice-free efficiency range, average, and standard deviation
+_tbl_vars = ['Mean', 'Std. Dev', 'Min', 'Max']
+_lw  = 16
+_vw  = 12
+_sep = '=' * (_lw + _vw * len(_tbl_vars))
+
+f_ice = xr.open_dataset(data_path + 'ncep_doe_reanalysis_ii/icec.nc')['icec'].transpose('latitude', 'longitude').values
+icemask = flatten((f_ice <= 0.05).astype(int), ocnmask[:, :, 0])
+weights = flatten(cell_volume[:, :, 0], ocnmask[:, :, 0])
+
+print('Ice-Free OAE Efficiency Statistics (eta, %)')
+print(_sep)
+print(f"{'':>{_lw}}" + ''.join(f"{h:>{_vw}}" for h in _tbl_vars))
+for horizon, _ in _horizons:
+    for scenario in scenarios:
+        _row = f"{horizon}, {scenario}\t"
+        data  = flatten(eta_cache[f'eta_{horizon}_{scenario}'], ocnmask[:, :, 0])
+        mask  = icemask.astype(bool) & np.isfinite(data)
+        d, w  = data[mask], weights[mask]
+        _mean = np.average(d, weights=w)
+        _std  = np.sqrt(np.average((d - _mean) ** 2, weights=w))
+        _low  = np.min(d)
+        _high = np.max(d)
+        _vars = [_mean, _std, _low, _high]
+        for _var in _vars:
+            _row += f"{float(_var * 100):>{_vw - 1}.2f}%"
+        print(_row)
+print(_sep)
+
+# North Pacific example
+data = eta_cache[f'eta_15yr_ssp126'] 
+print(f"\neta at (49.5 ºN, 201 ºE): {data[70, 100] * 100:.2f}%")
+print(f"eta at (41.5 ºN, 201 ºE): {data[66, 100] * 100:.2f}%")
+distance = geodesic((latitude[70], longitude[100]), (latitude[66], longitude[100])).km
+print(f'distance between these coords: {distance:.2f} (km)')
+
+# total anthropogenic C added to ocean (Pmol)
+_lw  = 6
+_vw  = 12
+_sep = '=' * (_lw + _vw * len(_tbl_vars))
+
+print('Anthropogenic Carbon Statistics (Pmol accumulated)')
+print(_sep)
+print(f"{'':>{_lw}}" + ''.join(f"{s:>{_vw}}" for s in scenarios))
+
+for horizon, year in _horizons:
+    _row = f"{horizon}\t"
+    for scenario in scenarios:
+        if scenario == 'none':
+            _Canth = 0
+        else:
+            data  = interp_trace(data_path, year, scenario, latitude, longitude, depth, ocnmask) - interp_trace(data_path, 2022, scenario, latitude, longitude, depth, ocnmask)
+            _Canth = np.nansum(data * rho * cell_volume * 1e-6) * 1e-15 # Pmol
+        _row += f"{float(_Canth):>{_vw - 1}.2f}"
+    print(_row)
+print(_sep)
+
+#%%

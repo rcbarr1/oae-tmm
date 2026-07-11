@@ -7,6 +7,7 @@ dependencies:
   - dask=2026.6.0
   - geopandas=1.0.1
   - geopandas-base=1.0.1
+  - geopy=2.4.1
   - gsw=3.6.19
   - h5netcdf=1.2.0
   - matplotlib=3.10.3

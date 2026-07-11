@@ -23,6 +23,7 @@ from tqdm.dask import TqdmCallback
 # load model architecture
 data_path = './data/'
 output_path = '/Volumes/LaCie/outputs/max_AT/'
+output_path = './outputs/'
 
 # open data associated with transport matrix
 model_data = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')
@@ -105,67 +106,7 @@ else:
         cache = xr.Dataset(cache_vars).compute()
     cache.to_netcdf(cache_path)
 
-#%% plot AT added over time for timestepping comparison
-fig = plt.figure(figsize=(5, 5), dpi=200)
-ax = fig.gca()
-
-for label in labels:
-    var = cache[f'AT_added_cum_{label}']
-    ax.plot(var[f'time_{label}'].values, var.values, label=label)
-
-ax.set_xlabel('Year', fontsize=_fs)
-ax.set_ylabel(r'Cumulative $A_{\mathrm{T}}$ added to mixed layer (mol)', fontsize=_fs)
-for side in ('top', 'bottom', 'left', 'right'):
-    ax.spines[side].set_color(textcolor)
-ax.tick_params(labelsize=_fs)
-ax.legend(fontsize=_fs, frameon=False)
-
-#%% plot change in atmospheric CO2 over time for timestepping comparison
-fig = plt.figure(figsize=(5, 5), dpi=200)
-ax = fig.gca()
-
-for label in labels:
-    var = cache[f'delxCO2_{label}']
-    ax.plot(var[f'time_{label}'].values, var.values, label=label)
-
-ax.set_xlabel('Year', fontsize=_fs)
-ax.set_ylabel(r'Change in atmospheric CO$_{2}$ (ppm)', fontsize=_fs)
-for side in ('top', 'bottom', 'left', 'right'):
-    ax.spines[side].set_color(textcolor)
-ax.tick_params(labelsize=_fs)
-ax.legend(fontsize=_fs, frameon=False)
-
-#%% plot change in CT over time for timestepping comparison
-fig = plt.figure(figsize=(5, 5), dpi=200)
-ax = fig.gca()
-
-for label in labels:
-    var = cache[f'delCT_{label}']
-    ax.plot(var[f'time_{label}'].values, var.values, label=label)
-
-ax.set_xlabel('Year', fontsize=_fs)
-ax.set_ylabel(r'Change in $C_{\mathrm{T}}$ (mol)', fontsize=_fs)
-for side in ('top', 'bottom', 'left', 'right'):
-    ax.spines[side].set_color(textcolor)
-ax.tick_params(labelsize=_fs)
-ax.legend(fontsize=_fs, frameon=False)
-
-#%% plot change in AT over time for timestepping comparison
-fig = plt.figure(figsize=(5, 5), dpi=200)
-ax = fig.gca()
-
-for label in labels:
-    var = cache[f'delAT_{label}']
-    ax.plot(var[f'time_{label}'].values, var.values, label=label)
-
-ax.set_xlabel('Year', fontsize=_fs)
-ax.set_ylabel(r'Change in $A_{\mathrm{T}}$ (mol)', fontsize=_fs)
-for side in ('top', 'bottom', 'left', 'right'):
-    ax.spines[side].set_color(textcolor)
-ax.tick_params(labelsize=_fs)
-ax.legend(fontsize=_fs, frameon=False)
-
-# %% four-panel full-ocean totals figure for paper
+# %% figure: four-panel full-ocean totals for paper
 # a. cumulative AT added over time
 # b. oae efficiency over time (delCT / delAT)
 # c. change in atmospheric CO2 over time
@@ -182,7 +123,7 @@ for label, color in zip(labels, colors):
                     np.concatenate([pre_zeros, cache[f'AT_added_cum_{label}'].values]), 
                     label=label, c=color)
 axes[0][0].set_xlabel('Year', fontsize=_fs)
-axes[0][0].set_ylabel(r'Cumulative ${A_{\mathrm{T}}}^{\prime}$ added (mol)', fontsize=_fs)
+axes[0][0].set_ylabel(r'Cumulative ${A_{\mathrm{T}}}$ Added (mol)', fontsize=_fs)
 axes[0][0].set_xlim([2020, 2100])
 axes[0][0].legend(fontsize=_fs, frameon=False)
 for side in ('top', 'bottom', 'left', 'right'):
@@ -191,14 +132,14 @@ axes[0][0].tick_params(labelsize=_fs)
 axes[0][0].text(0.02, 0.97, '(a)', transform=axes[0][0].transAxes,
                 fontsize=_fs, va='top', ha='left', color=textcolor)
 
-for label, color in zip(labels, colors):
-    time = cache[f'delCT_{label}'][f'time_{label}'].values
-    delAT_vals = cache[f'delAT_{label}'].values
-    with np.errstate(invalid='ignore', divide='ignore'):
-        efficiency = np.where(delAT_vals != 0, cache[f'delCT_{label}'].values / delAT_vals * 100, np.nan)
-    axes[0][1].plot(time, efficiency, label=label, c=color)
+for label, scenario, color in zip(labels, scenarios, colors):
+    time = cache[f'delxCO2_{label}'][f'time_{label}'].values
+    time_extended = np.concatenate([np.arange(2020, 2030, 1), time])
+    atmospheric_co2 = get_co2_scenario(scenario, time_extended)
+    axes[0][1].plot(time, cache[f'delxCO2_{label}'].values + atmospheric_co2[10:], label=label, c=color)
+    axes[0][1].plot(time_extended, atmospheric_co2, label=label, ls=':', c=color)
 axes[0][1].set_xlabel('Year', fontsize=_fs)
-axes[0][1].set_ylabel(r'OAE efficiency: ${C_{\mathrm{T}}}^{\prime}$ / ${A_{\mathrm{T}}}^{\prime}$ (%)', fontsize=_fs)
+axes[0][1].set_ylabel(r'Atmospheric CO$_2$ (ppm)', fontsize=_fs)
 axes[0][1].set_xlim([2020, 2100])
 for side in ('top', 'bottom', 'left', 'right'):
     axes[0][1].spines[side].set_color(textcolor)
@@ -212,7 +153,7 @@ for label, color in zip(labels, colors):
                     np.concatenate([pre_zeros, cache[f'delCT_{label}'].values]),
                     label=label, c=color)
 axes[1][0].set_xlabel('Year', fontsize=_fs)
-axes[1][0].set_ylabel(r'Change in $C_{\mathrm{T}}$ (mol)', fontsize=_fs)
+axes[1][0].set_ylabel(r'Change in $C_{\mathrm{T}}$ Content (mol)', fontsize=_fs)
 axes[1][0].set_xlim([2020, 2100])
 for side in ('top', 'bottom', 'left', 'right'):
     axes[1][0].spines[side].set_color(textcolor)
@@ -220,14 +161,14 @@ axes[1][0].tick_params(labelsize=_fs)
 axes[1][0].text(0.02, 0.97, '(c)', transform=axes[1][0].transAxes,
                 fontsize=_fs, va='top', ha='left', color=textcolor)
 
-for label, scenario, color in zip(labels, scenarios, colors):
-    time = cache[f'delxCO2_{label}'][f'time_{label}'].values
-    time_extended = np.concatenate([np.arange(2020, 2030, 1), time])
-    atmospheric_co2 = get_co2_scenario(scenario, time_extended)
-    axes[1][1].plot(time, cache[f'delxCO2_{label}'].values + atmospheric_co2[10:], label=label, c=color)
-    axes[1][1].plot(time_extended, atmospheric_co2, label=label, ls=':', c=color)
+for label, color in zip(labels, colors):
+    time = cache[f'delCT_{label}'][f'time_{label}'].values
+    delAT_vals = cache[f'delAT_{label}'].values
+    with np.errstate(invalid='ignore', divide='ignore'):
+        efficiency = np.where(delAT_vals != 0, cache[f'delCT_{label}'].values / delAT_vals * 100, np.nan)
+    axes[1][1].plot(time, efficiency, label=label, c=color)
 axes[1][1].set_xlabel('Year', fontsize=_fs)
-axes[1][1].set_ylabel(r'Atmospheric CO$_2$ (ppm)', fontsize=_fs)
+axes[1][1].set_ylabel(r'OAE Efficiency: ${C_{\mathrm{T}}}^{\prime}$ / ${A_{\mathrm{T}}}^{\prime}$ (%)', fontsize=_fs)
 axes[1][1].set_xlim([2020, 2100])
 for side in ('top', 'bottom', 'left', 'right'):
     axes[1][1].spines[side].set_color(textcolor)
@@ -236,6 +177,42 @@ axes[1][1].text(0.02, 0.97, '(d)', transform=axes[1][1].transAxes,
                 fontsize=_fs, va='top', ha='left', color=textcolor)
 
 plt.tight_layout()
+
+#%% statistics: ocean total changes
+
+# for each scenario, print AT added, change in CT, change in atmospheric CO2, total atmospheric CO2, % change in atmospheric CO2 w/OAE (compared to anthropogenic increase)
+
+_tbl_vars = ['AT_added (Pmol)', 'delCT (Pmol)', 'delxCO2 (ppm)', 'xCO2 (ppm)', 'rel_delxCO2 (%)', 'eta (%)']
+_lw  = 16
+_vw  = 16
+_sep = '=' * (_lw + _vw * len(_tbl_vars))
+
+year = 2075
+start_year = 2020
+start_CDR = 2030
+labels = ['None', 'SSP1-2.6', 'SSP2-4.5', 'SSP5-3.4 OS']
+scenarios = ['none', 'ssp126', 'ssp245', 'ssp534_OS']
+
+print(f'Total Ocean Changes Statistics {year}')
+print(_sep)
+print(f"{'':>{_lw}}" + ''.join(f"{h:>{_vw}}" for h in _tbl_vars))
+
+for label, scenario in zip(labels, scenarios):
+    _row = f"{label:<{_lw}}"
+    AT_added = cache[f'AT_added_cum_{label}'].sel({f'time_{label}': year}, method='nearest', tolerance=0.5).values * 1e-15
+    delAT = cache[f'delAT_{label}'].sel({f'time_{label}': year}, method='nearest', tolerance=0.5).values * 1e-15
+    delCT = cache[f'delCT_{label}'].sel({f'time_{label}': year}, method='nearest', tolerance=0.5).values * 1e-15
+    delxCO2 = cache[f'delxCO2_{label}'].sel({f'time_{label}': year}, method='nearest', tolerance=0.5).values
+    if scenario == 'none': xCO2 = delxCO2 + get_co2_scenario(scenario, [start_year])
+    else: xCO2 = delxCO2 + get_co2_scenario(scenario, [year])
+    if scenario == 'none': relative_delxCO2 = np.nan 
+    else: relative_delxCO2 = np.abs(delxCO2) / (get_co2_scenario(scenario, [year]) - get_co2_scenario(scenario, [start_CDR])) * 100
+    eta = delCT/delAT * 100
+    _vars = [AT_added, delCT, delxCO2, xCO2, relative_delxCO2, eta]
+    for _var in _vars:
+        _row += f"{float(_var):>{_vw}.2f}"
+    print(_row)
+print(_sep)
 
 #%% load data for pH calculations
 
@@ -352,7 +329,7 @@ del_RC_2100_3d     = RC_OAE_2100_3d - RC_2100_3d
 del_omegaA_2100_3d = omegaA_OAE_2100_3d - omegaA_2100_3d
 del_pCO2_2100_3d   = pCO2_OAE_2100_3d - pCO2_2100_3d
 
-# %% carbonate chemistry changes visualization figures (SSP2-4.5, max OAE vs. no OAE)
+# %% figures: carbonate chemistry changes visualizations (SSP2-4.5, max OAE vs. no OAE)
 # rows: 2050 (top), 2100 (bottom)
 # cols: surface map | Pacific (209°E) | Atlantic (335°E) | Indian Ocean (91°E)
 
@@ -363,11 +340,11 @@ section_lat_lims = [(59, -75), (67, -76), (21, -66)]  # (north, south) to match 
 data_crs = ccrs.PlateCarree()
 map_proj = ccrs.EqualEarth(central_longitude=200)
 
-# figure 1: surface maps of ΔpH, ΔRevelle factor, ΔΩ_C (3 rows × 2 cols)
+# surface maps of change in pH, Revelle factor, Ω_A (3 rows × 2 cols)
 surface_vars = [
-    (r'$\mathrm{pH}^{\prime}$', del_pH_2050_3d[:, :, 0],     del_pH_2100_3d[:, :, 0]),
-    (r'${R_C}^{\prime}$',       del_RC_2050_3d[:, :, 0],     del_RC_2100_3d[:, :, 0]),
-    (r'${\Omega_A}^{\prime}$',  del_omegaA_2050_3d[:, :, 0], del_omegaA_2100_3d[:, :, 0]),
+    (r'$\mathrm{pH}$', del_pH_2050_3d[:, :, 0],     del_pH_2100_3d[:, :, 0]),
+    (r'${R_C}}$',      del_RC_2050_3d[:, :, 0],     del_RC_2100_3d[:, :, 0]),
+    (r'${\Omega_A}$',  del_omegaA_2050_3d[:, :, 0], del_omegaA_2100_3d[:, :, 0]),
 ]
 
 fig3, axes3 = plt.subplots(3, 2, figsize=(12, 9), dpi=200,
@@ -400,17 +377,17 @@ for row_idx, (im, var_label) in enumerate(im_list):
     ax_pos  = axes3[row_idx, 1].get_position()
     cbar_ax = fig3.add_axes([0.87, ax_pos.y0, 0.015, ax_pos.height])
     cbar3   = fig3.colorbar(im, cax=cbar_ax)
-    cbar3.set_label(f'{var_label} (max OAE − no OAE)', fontsize=_fs)
+    cbar3.set_label(f'Change in {var_label}', fontsize=_fs)
     cbar3.ax.yaxis.label.set_color(textcolor)
     cbar3.ax.tick_params(colors=textcolor, labelsize=_fs)
 
 sec_cmap = plt.cm.RdBu.copy()
 sec_cmap.set_bad('lightgray')
 
-# figure 2: pCO2 interior sections (3 rows × 3 cols)
+# pCO2 interior sections (3 rows × 3 cols)
 fig2, sec_axes = plt.subplots(2, 3, figsize=(12, 7), dpi=200)
 
-sec_col_titles = ['Pacific (209°E)', 'Atlantic (335°E)', 'Indian Ocean (91°E)']
+sec_col_titles = ['Pacific', 'Atlantic', 'Indian Ocean']
 del_pCO2_by_year = {
     2050: [del_pCO2_2050_3d[:, :, 0],
            del_pCO2_2050_3d[:, pac_idx, :],
@@ -446,9 +423,10 @@ plt.tight_layout()
 fig2.subplots_adjust(right=0.87)
 cbar_ax = fig2.add_axes([0.89, 0.1, 0.015, 0.8])
 cbar2   = fig2.colorbar(im, cax=cbar_ax)
-cbar2.set_label(r'$\mathrm{pCO_2}^{\prime}$ (max OAE − no OAE)', fontsize=_fs)
+cbar2.set_label(r'Change in $\mathrm{pCO_2}$', fontsize=_fs)
 cbar2.ax.yaxis.label.set_color(textcolor)
 cbar2.ax.tick_params(colors=textcolor, labelsize=_fs)
 
+#%% statistics: carbonate chemistry changes
 
 #%%
