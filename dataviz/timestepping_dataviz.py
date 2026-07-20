@@ -67,7 +67,6 @@ max_AT_labels = ['Annual', 'Monthly', 'Dekadal', 'Pentadal', 'Daily', 'Hourly', 
 #%% compute or load cached max_AT time series
 max_AT_cache_path = max_AT_path + 'max_AT_timestepping_cache.nc'
 
-
 def _load_max_AT(name, label):
     time_dim = f'time_{label}'
     exp_vars = {}
@@ -183,6 +182,7 @@ for label in max_AT_labels:
         print(_row)
 print(_sep)
 
+max_AT_cache.close()
 
 # ============================================================================ #
 #%%  IMPULSE RESPONSE TIMESTEPPING                                              #
@@ -388,5 +388,7 @@ for label in ir_labels:
                 {f'time_{label}_{cell_num}': 2027}, method='nearest').values
             _row += f"{val / ref_val * 100:>{_col_w}.2f}%"
         print(_row)
+
+ir_cache.close()
 
 # %%

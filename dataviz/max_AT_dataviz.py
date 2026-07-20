@@ -23,7 +23,7 @@ from tqdm.dask import TqdmCallback
 # load model architecture
 data_path = './data/'
 output_path = '/Volumes/LaCie/outputs/max_AT/'
-output_path = './outputs/'
+#output_path = './outputs/'
 
 # open data associated with transport matrix
 model_data = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')
@@ -343,7 +343,7 @@ map_proj = ccrs.EqualEarth(central_longitude=200)
 # surface maps of change in pH, Revelle factor, Ω_A (3 rows × 2 cols)
 surface_vars = [
     (r'$\mathrm{pH}$', del_pH_2050_3d[:, :, 0],     del_pH_2100_3d[:, :, 0]),
-    (r'${R_C}}$',      del_RC_2050_3d[:, :, 0],     del_RC_2100_3d[:, :, 0]),
+    (r'${R_C}$',      del_RC_2050_3d[:, :, 0],     del_RC_2100_3d[:, :, 0]),
     (r'${\Omega_A}$',  del_omegaA_2050_3d[:, :, 0], del_omegaA_2100_3d[:, :, 0]),
 ]
 
@@ -423,10 +423,28 @@ plt.tight_layout()
 fig2.subplots_adjust(right=0.87)
 cbar_ax = fig2.add_axes([0.89, 0.1, 0.015, 0.8])
 cbar2   = fig2.colorbar(im, cax=cbar_ax)
-cbar2.set_label(r'Change in $\mathrm{pCO_2}$', fontsize=_fs)
+cbar2.set_label(r'Change in $\mathrm{pCO_2}$ (µatm)', fontsize=_fs)
 cbar2.ax.yaxis.label.set_color(textcolor)
 cbar2.ax.tick_params(colors=textcolor, labelsize=_fs)
 
 #%% statistics: carbonate chemistry changes
 
+# for SSP2-4.5, average change in surface ocean pH, Revelle factor, Ω_A, and pCO2 by 2100
+_labels = ['pH', 'RC', 'omegaA', 'pCO2']
+_vars   = [del_pH_2100_3d, del_RC_2100_3d, del_omegaA_2100_3d, del_pCO2_2100_3d]
+
+for var, label in zip(_vars, _labels):
+    data    = flatten(var[:,:,0], ocnmask[:,:,0]), 
+    weights = flatten(cell_volume[:,:,0], ocnmask[:,:,0]), 
+    print(f'Average change in surface ocean {label} (2100):\t{np.average(data, weights=weights):.2f}')
+
+# maximum surface and subsurface pCO2 changes
+print(f'Maximum change in surface ocean pCO2 (2100):\t{np.nanmin(del_pCO2_2100_3d[:,:,0]):.2f}')
+print(f'Maximum change in subsurface ocean pCO2 (2100):\t{np.nanmin(del_pCO2_2100_3d[:,:,1::]):.2f}')
+
+# sample location in North Pacific (53 ºN, 151 ºW)
+depth_idx = 12
+print(f'Surface change in pCO2 at 53ºN, 151ºW (2100):\t{del_pCO2_2100_3d[72, 104, 0]:.2f}')
+print(f'{depth[depth_idx]:.0f} m change in pCO2 at 53ºN, 151ºW (2100):\t{del_pCO2_2100_3d[72, 104, depth_idx]:.2f}')
+print(f'Depth difference (m):\t\t\t\t{depth[depth_idx] - depth[0]:.2f}')
 #%%
