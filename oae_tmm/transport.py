@@ -14,15 +14,15 @@ Provides two public functions:
 
 Governing equations encoded in A (units in brackets):
 
-    1. d(∆xCO2)/dt = ∆q_sea-air,xCO2                              [µmol CO2 (µmol air)^-1 yr^-1] (assumed equivalent to [µatm CO2 (µatm air)^-1 yr^-1])
-    2. d(∆CT)/dt   = TR * ∆CT + ∆q_air-sea,CT + ∆q_CDR,CT         [µmol CT (kg seawater)^-1 yr^-1]
-    3. d(∆AT)/dt   = TR * ∆AT + ∆q_CDR,AT                         [µmol AT (kg seawater)^-1 yr^-1]
+    1. d(xCO2')/dt = q_sea-air,xCO2'                              [µmol CO2 (µmol air)^-1 yr^-1] (assumed equivalent to [µatm CO2 (µatm air)^-1 yr^-1])
+    2. d(CT')/dt   = TR * CT' + q_air-sea,CT' + q_CDR,CT'         [µmol CT (kg seawater)^-1 yr^-1]
+    3. d(AT')/dt   = TR * AT' + q_CDR,AT'                         [µmol AT (kg seawater)^-1 yr^-1]
 
-Air-sea fluxes depend on ∆c (not on external forcing), so they fold into A
+Air-sea fluxes depend on c' (not on external forcing), so they fold into A
 rather than the source vector q:
 
-    ∆q_sea-air,xCO2 = gammax * (rho * R_C * ∆CT/beta_C + rho * R_A * ∆AT/beta_A - K0 * Patm * ∆xCO2)
-    ∆q_air-sea,CT   = gammaC * (R_C * ∆CT/beta_C + R_A * ∆AT/beta_A - K0 * Patm/rho * ∆xCO2)
+    q_sea-air,xCO2' = gammax * (rho * R_C * CT'/beta_C + rho * R_A * AT'/beta_A - K0 * Patm * xCO2')
+    q_air-sea,CT'   = gammaC * (R_C * CT'/beta_C + R_A * AT'/beta_A - K0 * Patm/rho * xCO2')
 
     where gammax = k * V * (1 - f_ice) / Ma / z1
           gammaC = -k * (1 - f_ice) / z1
@@ -63,14 +63,14 @@ def build_A_matrix(
     """Assemble the 2m+1 × 2m+1 sparse block matrix A.
 
     Encodes ocean carbon transport (TR) and linearized air-sea CO2 exchange
-    for state vector c = [∆xCO2 [µmol CO2 (µmol air)^-1], ∆CT (m cells) [µmol kg^-1], ∆AT (m cells) [µmol kg^-1]]:
+    for state vector c = [xCO2' [µmol CO2 (µmol air)^-1], CT' (m cells) [µmol kg^-1], AT' (m cells) [µmol kg^-1]]:
 
-        A = [-gammax * K0 * Patm       | gammax * rho * R_C / beta_C | gammax * rho * R_A / beta_A]
-            [-gammaC * K0 * Patm / rho | TR + gammaC * R_C / beta_C  | gammaC * R_A / beta_A      ]
-            [0                         | 0                           | TR                         ]
+        A = [-Patm * sum(gammax * K0)  | gammax * rho * R_C / beta_C      | gammax * rho * R_A / beta_A]
+            [-gammaC * K0 * Patm / rho | TR + I * (gammaC * R_C / beta_C) | I * (gammaC * R_A / beta_A)]
+            [0                         | 0                                | TR                         ]
 
     where beta_C = CT/aqueous_CO2 and beta_A = AT/aqueous_CO2 are computed
-    internally (unitless).
+    internally (unitless) and I is an identity matrix of shape (m, m).
 
     gammax = k * V * (1 - f_ice) / Ma / z1 and gammaC = -k * (1 - f_ice) / z1
     are local variables that group the air-sea exchange terms; they have no
@@ -128,23 +128,23 @@ def build_A_matrix(
     gammax = k * V * (1 - f_ice) / Ma / z1
     gammaC = -k * (1 - f_ice) / z1
 
-    # Block structure — c = [∆xCO2 (1) [µmol CO2 (µmol air)^-1], ∆CT (m) [µmol kg^-1], ∆AT (m) [µmol kg^-1]], total length 2m+1:
+    # Block structure — c = [xCO2' (1) [µmol CO2 (µmol air)^-1], CT' (m) [µmol kg^-1], AT' (m) [µmol kg^-1]], total length 2m+1:
     #
-    #   A = [ A00: 1×1  | A01: 1×m  | A02: 1×m  ]  ← calculates d(∆xCO2)/dt
-    #       [ A10: m×1  | A11: m×m  | A12: m×m  ]  ← calculates d(∆CT)/dt
-    #       [ A20: m×1  | A21: m×m  | A22: m×m  ]  ← calculates d(∆AT)/dt
+    #   A = [ A00: 1×1  | A01: 1×m  | A02: 1×m  ]  ← calculates d(xCO2')/dt
+    #       [ A10: m×1  | A11: m×m  | A12: m×m  ]  ← calculates d(CT')/dt
+    #       [ A20: m×1  | A21: m×m  | A22: m×m  ]  ← calculates d(AT')/dt
     #
-    #   A00 = -gammax * K0 * Patm             scalar (summed over surface cells)
-    #   A01 =  gammax * rho * R_C / beta_C    1×m row vector
-    #   A02 =  gammax * rho * R_A / beta_A    1×m row vector
-    #   A10 = -gammaC * K0 * Patm / rho       m×1 column vector
+    #   A00 = -Patm * sum(gammax * K0)            scalar (summed over surface cells)
+    #   A01 =  gammax * rho * R_C / beta_C        1×m row vector
+    #   A02 =  gammax * rho * R_A / beta_A        1×m row vector
+    #   A10 = -gammaC * K0 * Patm / rho           m×1 column vector
     #   A11 =  TR + diag(gammaC * R_C / beta_C)   m×m sparse
-    #   A12 =  diag(gammaC * R_A / beta_A)         m×m sparse
-    #   A20 =  0                               m×1 zeros
-    #   A21 =  0                               m×m zeros
-    #   A22 =  TR                              m×m sparse
+    #   A12 =  diag(gammaC * R_A / beta_A)        m×m sparse
+    #   A20 =  0                                  m×1 zeros
+    #   A21 =  0                                  m×m zeros
+    #   A22 =  TR                                 m×m sparse
 
-    # --- row 0: ∆xCO2 equation ---
+    # --- row 0: xCO2' equation ---
     A00 = -Patm * np.sum(gammax * K0)                      # scalar
     A01 = gammax * rho * R_C / beta_C                      # (m,)
     A02 = gammax * rho * R_A / beta_A                      # (m,)
@@ -154,7 +154,7 @@ def build_A_matrix(
     A0_[1:(m+1)] = A01
     A0_[(m+1):] = A02
 
-    # --- row 1: ∆CT equation ---
+    # --- row 1: CT' equation ---
     A10 = -gammaC * K0 * Patm / rho                                          # (m,)
     A11 = TR + sparse.diags(gammaC * R_C / beta_C, format='csr')
     A12 = sparse.diags(gammaC * R_A / beta_A)
@@ -163,7 +163,7 @@ def build_A_matrix(
         sparse.csr_matrix(A10[:, np.newaxis]), A11, A12
     ])
 
-    # --- row 2: ∆AT equation (pure transport, no air-sea exchange) ---
+    # --- row 2: AT' equation (pure transport, no air-sea exchange) ---
     A2_ = sparse.hstack([
         sparse.csr_matrix((m, 1)), sparse.csr_matrix(TR.shape), TR
     ])

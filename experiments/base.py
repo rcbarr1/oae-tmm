@@ -220,13 +220,13 @@ class BaseExperiment(ABC):
         Parameters
         ----------
         c : np.ndarray
-            Current state vector [∆xCO2, ∆CT (m), ∆AT (m)], shape (2m+1,).
-
+            Current state vector [xCO2', CT' (m), AT' (m)], shape (2m+1,).
+            
         Returns
         -------
         dict with keys:
-            CT_current  : np.ndarray (m,)  CT_preind + ∆CT + Canth [µmol kg^-1]
-            AT_current  : np.ndarray (m,)  AT + ∆AT [µmol kg^-1]
+            CT_current  : np.ndarray (m,)  CT_preind + CT' + Canth [µmol kg^-1]
+            AT_current  : np.ndarray (m,)  AT + AT' [µmol kg^-1]
             aqueous_CO2 : np.ndarray (m,)  aqueous CO2 [µmol kg^-1]
             R_C         : np.ndarray (m,)  Revelle buffer factor
             R_A         : np.ndarray (m,)  Alkalinity buffer factor

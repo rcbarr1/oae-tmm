@@ -151,9 +151,9 @@ CT_added_pmol = np.nansum(ds[ct_add].values    * cell_vol_3d[np.newaxis] * rho,
 
 fig1, axes1 = plt.subplots(5, 1, figsize=(10, 11), sharex=True)
 fig1.suptitle(os.path.basename(filepath), fontsize=10)
-axes1[0].plot(time, delAT_pmol);             axes1[0].set_ylabel('∆AT [Pmol]')
-axes1[1].plot(time, delCT_pmol);             axes1[1].set_ylabel(f'∆{ct_key[3:]} [Pmol]')
-axes1[2].plot(time, ds['delxCO2'].values);   axes1[2].set_ylabel('∆xCO₂ [ppm]')
+axes1[0].plot(time, delAT_pmol);             axes1[0].set_ylabel("AT' [Pmol]")
+axes1[1].plot(time, delCT_pmol);             axes1[1].set_ylabel(f"{ct_key[3:]}' [Pmol]")
+axes1[2].plot(time, ds['delxCO2'].values);   axes1[2].set_ylabel("xCO₂' [ppm]")
 axes1[3].plot(time, AT_added_pmol);          axes1[3].set_ylabel('AT_added [Pmol]')
 axes1[4].plot(time, CT_added_pmol);          axes1[4].set_ylabel(f'{ct_add} [Pmol]')
 axes1[4].set_xlabel('year')
@@ -173,7 +173,7 @@ absmax = float(np.percentile(np.abs(arr[~np.isnan(arr)]), 98))
 vmin, vmax = -absmax, absmax
 
 fig2, axes2 = plt.subplots(2, 3, figsize=(15, 6))
-fig2.suptitle(f'∆AT (µmol kg⁻¹) — {os.path.basename(filepath)}', fontsize=10)
+fig2.suptitle(f"AT' (µmol kg⁻¹) — {os.path.basename(filepath)}", fontsize=10)
 for col, (ti, tlbl) in enumerate(zip(t_idxs, t_lbls)):
     yr = float(time[ti])
     _map_panel(axes2[0, col], lons, lats, arr[ti, :, :, 0],
@@ -192,7 +192,7 @@ absmax = float(np.percentile(np.abs(arr[~np.isnan(arr)]), 98))
 vmin, vmax = -absmax, absmax
 
 fig3, axes3 = plt.subplots(2, 3, figsize=(15, 6))
-fig3.suptitle(f'∆{ct_key[3:]} (µmol kg⁻¹) — {os.path.basename(filepath)}', fontsize=10)
+fig3.suptitle(f"{ct_key[3:]}' (µmol kg⁻¹) — {os.path.basename(filepath)}", fontsize=10)
 for col, (ti, tlbl) in enumerate(zip(t_idxs, t_lbls)):
     yr = float(time[ti])
     _map_panel(axes3[0, col], lons, lats, arr[ti, :, :, 0],

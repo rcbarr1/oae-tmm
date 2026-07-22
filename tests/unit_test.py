@@ -394,10 +394,10 @@ def test_build_A_matrix():
     A0 = build_A_matrix(TR, np.zeros(m), np.zeros(m), V, R_C, R_A, CT, AT, aqueous_CO2, K0, z1, rho, Patm, Ma)
     Ad = A0.toarray()
 
-    # Row 0 (∆xCO2 equation) should be all zeros (no air-sea flux)
+    # Row 0 (xCO2' equation) should be all zeros (no air-sea flux)
     passed &= _check(np.allclose(Ad[0, :], 0.0), 'k=0: xCO2 row (row 0) is all zeros')
 
-    # Column 0 (∆xCO2 → ocean coupling) should be all zeros
+    # Column 0 (xCO2' → ocean coupling) should be all zeros
     passed &= _check(np.allclose(Ad[:, 0], 0.0), 'k=0: xCO2 column (col 0) is all zeros')
 
     # CT-CT block [1:m+1, 1:m+1] should equal TR exactly
@@ -416,9 +416,9 @@ def test_build_A_matrix():
     passed &= _check(np.allclose(Ad[m+1:, 1:m+1], 0.0),
                      'k=0: AT-CT cross block is zeros')
 
-    # --- With nonzero k: A00 should be negative (∆xCO2 is damped by gas exchange) ---
+    # --- With nonzero k: A00 should be negative (xCO2' is damped by gas exchange) ---
     passed &= _check(A.toarray()[0, 0] < 0,
-                     'nonzero k: A[0,0] is negative (∆xCO2 damped by air-sea exchange)')
+                     "nonzero k: A[0,0] is negative (xCO2' damped by air-sea exchange)")
 
     return passed
 

@@ -4,9 +4,9 @@ Scientific invariant tests for oae_tmm.
 Tests physics that must hold regardless of grid resolution or experiment:
 
   1. Zero-forcing stability          — c=0, q=0 → c stays zero
-  2. CT mass conservation  (k=0)   — sum(∆CT·V·ρ) = sum(q_CT·V·ρ)·N·dt exactly
-  3. Total carbon conservation (k>0) — ∆xCO2·Ma + sum(∆CT·V·ρ) = sum(q_CT·V·ρ)·N·dt
-  4. AT mass conservation            — sum(∆AT·V·ρ) = sum(q_AT·V·ρ)·N·dt, for any k
+  2. CT mass conservation  (k=0)   — sum(CT'·V·ρ) = sum(q_CT'·V·ρ)·N·dt exactly
+  3. Total carbon conservation (k>0) — xCO2'·Ma + sum(CT'·V·ρ) = sum(q_CT·V·ρ)·N·dt
+  4. AT mass conservation            — sum(AT'·V·ρ) = sum(q_AT'·V·ρ)·N·dt, for any k
   5. Linearity                       — frozen A: 2×q → 2×c; c(q1+q2) = c(q1)+c(q2)
 
 All tests use a small synthetic grid with a hand-constructed mass-conserving
@@ -129,7 +129,7 @@ def test_zero_forcing():
 # ── Test 2: CT mass conservation (k=0) ──────────────────────────────────────
 
 def test_ct_conservation_no_exchange():
-    """With k=0, ocean CT mass = integral of source; ∆xCO2 stays zero."""
+    """With k=0, ocean CT mass = integral of source; xCO2' stays zero."""
     print('\n--- CT mass conservation (k=0) ---')
     passed = True
 
@@ -147,9 +147,9 @@ def test_ct_conservation_no_exchange():
     passed &= _check(rtol < 1e-6,
                      f'CT mass conserved to rtol < 1e-6: rtol = {rtol:.2e}')
 
-    # With k=0, xCO2 row/col of A are all zeros → ∆xCO2 must stay at 0
+    # With k=0, xCO2 row/col of A are all zeros → xCO2' must stay at 0
     passed &= _check(abs(c[0]) < 1e-20,
-                     f'∆xCO2 stays zero when k=0: |∆xCO2| = {abs(c[0]):.2e}')
+                     f"xCO2' stays zero when k=0: |xCO2'| = {abs(c[0]):.2e}")
 
     return passed
 
@@ -157,7 +157,7 @@ def test_ct_conservation_no_exchange():
 # ── Test 3: total carbon conservation (k>0) ──────────────────────────────────
 
 def test_total_carbon_conservation():
-    """∆xCO2·Ma + sum(∆CT·V·ρ) equals CDR input for all time, even with air-sea exchange."""
+    """xCO2'·Ma + sum(CT'·V·ρ) equals CDR input for all time, even with air-sea exchange."""
     print('\n--- total carbon conservation (k>0) ---')
     passed = True
 
@@ -170,18 +170,18 @@ def test_total_carbon_conservation():
     rtol           = abs(computed_total - expected_input) / abs(expected_input)
 
     print(f'  CDR input:             {expected_input:.6e} µmol')
-    print(f'  ocean ∆CT mass:       {_ct_mass(c):.6e} µmol')
-    print(f'  atm   ∆xCO2 mass:      {_atm_mass(c):.6e} µmol')
+    print(f"  ocean CT' mass:       {_ct_mass(c):.6e} µmol")
+    print(f"  atm   xCO2' mass:      {_atm_mass(c):.6e} µmol")
     print(f'  total (ocean + atm):   {computed_total:.6e} µmol')
     print(f'  relative error:        {rtol:.2e}')
     passed &= _check(rtol < 1e-6,
                      f'total carbon conserved to rtol < 1e-6: rtol = {rtol:.2e}')
 
-    # Physical sanity: some CT must have outgassed → ∆xCO2 > 0 and ∆CT < CDR input
+    # Physical sanity: some CT must have outgassed → xCO2' > 0 and CT' < CDR input
     passed &= _check(_atm_mass(c) > 0,
-                     'air-sea exchange active: ∆xCO2 > 0 after CT injection')
+                     "air-sea exchange active: xCO2' > 0 after CT injection")
     passed &= _check(_ct_mass(c) < expected_input,
-                     'air-sea exchange active: ocean ∆CT < total input (some outgassed)')
+                     "air-sea exchange active: ocean CT' < total input (some outgassed)")
 
     return passed
 
@@ -191,9 +191,9 @@ def test_total_carbon_conservation():
 def test_at_conservation():
     """AT mass is exactly the integral of the AT source, for any value of k.
 
-    With k=0: ∆CT and ∆xCO2 stay zero (no coupling).
-    With k>0: AT injection draws down atmospheric CO2 (OAE effect; ∆xCO2 < 0)
-              and ∆xCO2·Ma + sum(∆CT·V·ρ) = 0 (carbon is transferred, not created).
+    With k=0: CT' and xCO2' stay zero (no coupling).
+    With k>0: AT injection draws down atmospheric CO2 (OAE effect; xCO2' < 0)
+              and xCO2'·Ma + sum(CT'·V·ρ) = 0 (carbon is transferred, not created).
     """
     print('\n--- AT mass conservation ---')
     passed = True
@@ -214,25 +214,25 @@ def test_at_conservation():
         passed &= _check(rtol < 1e-6,
                          f'[{label}] AT mass conserved to rtol < 1e-6: rtol = {rtol:.2e}')
 
-    # k=0: all coupling terms vanish — ∆xCO2 and ∆CT must stay exactly zero
+    # k=0: all coupling terms vanish — xCO2' and CT' must stay exactly zero
     passed &= _check(abs(c_k0[0]) < 1e-20,
-                     f'[k=0] ∆xCO2 stays zero with only AT source: |∆xCO2| = {abs(c_k0[0]):.2e}')
+                     f"[k=0] xCO2' stays zero with only AT source: |xCO2'| = {abs(c_k0[0]):.2e}")
     passed &= _check(abs(_ct_mass(c_k0)) < 1e-6,
-                     f'[k=0] ∆CT mass stays zero with only AT source: {abs(_ct_mass(c_k0)):.2e}')
+                     f"[k=0] CT' mass stays zero with only AT source: {abs(_ct_mass(c_k0)):.2e}")
 
     # k>0: alkalinity addition draws down atmospheric CO2 (OAE effect)
-    # A02 = gammax·ρ·R_A/β_A < 0 (since R_A < 0) → rising ∆AT drives ∆xCO2 negative
+    # A02 = gammax·ρ·R_A/β_A < 0 (since R_A < 0) → rising AT' drives xCO2' negative
     passed &= _check(c_k[0] < 0,
-                     f'[k>0] ∆xCO2 < 0 after AT injection (OAE CO2 drawdown): ∆xCO2 = {c_k[0]:.4e}')
+                     f"[k>0] xCO2' < 0 after AT injection (OAE CO2 drawdown): xCO2' = {c_k[0]:.4e}")
 
     # k>0: carbon is transferred from atmosphere to ocean, not created
-    # → ∆xCO2·Ma + sum(∆CT·V·ρ) = 0 exactly (no CT/xCO2 source term)
+    # → xCO2'·Ma + sum(CT'·V·ρ) = 0 exactly (no CT/xCO2 source term)
     ct_plus_atm = _ct_mass(c_k) + _atm_mass(c_k)
     norm        = max(abs(_ct_mass(c_k)), abs(_atm_mass(c_k)))
     rtol_carbon = abs(ct_plus_atm) / norm
-    print(f'  [k>0] ocean ∆CT: {_ct_mass(c_k):.4e}, atm ∆xCO2: {_atm_mass(c_k):.4e}, sum: {ct_plus_atm:.4e}')
+    print(f"  [k>0] ocean CT': {_ct_mass(c_k):.4e}, atm xCO2': {_atm_mass(c_k):.4e}, sum: {ct_plus_atm:.4e}")
     passed &= _check(rtol_carbon < 1e-6,
-                     f'[k>0] ∆xCO2·Ma + sum(∆CT·V·ρ) = 0 to rtol < 1e-6: rtol = {rtol_carbon:.2e}')
+                     f"[k>0] xCO2'·Ma + sum(CT'·V·ρ) = 0 to rtol < 1e-6: rtol = {rtol_carbon:.2e}")
 
     return passed
 

@@ -135,7 +135,7 @@ def write_simulation_step(
 ) -> None:
     """Append one timestep to an open simulation output file.
 
-    Partitions c and q_dt into their tracer components (∆xCO2, ∆CT, ∆AT),
+    Partitions c and q_dt into their tracer components (xCO2', CT', AT'),
     reshapes flat ocean-only vectors to 3D with make_3d, and appends to the
     unlimited time dimension.
 
@@ -144,11 +144,11 @@ def write_simulation_step(
     ds : netCDF4.Dataset
         Open dataset returned by open_simulation_output().
     c : np.ndarray
-        State vector [∆xCO2, ∆CT (m), ∆AT (m)], shape (2m+1,).
+        State vector [xCO2', CT' (m), AT' (m)], shape (2m+1,).
     q_dt : np.ndarray
         Source/sink vector * timestep [tracer units], shape (2m+1,).
-        Pass q * dt (not the raw flux rate q) so stored values are integrated
-        amounts per timestep.
+        Pass q' * dt (not the raw flux rate q') so stored values are
+        integrated amounts per timestep.
     time : float
         Calendar year for this timestep [decimal years CE].
     ocnmask : np.ndarray
