@@ -147,7 +147,7 @@ def write_simulation_step(
         State vector [xCO2', CT' (m), AT' (m)], shape (2m+1,).
     q_dt : np.ndarray
         Source/sink vector * timestep [tracer units], shape (2m+1,).
-        Pass q' * dt (not the raw flux rate q') so stored values are
+        Pass q * dt (not the raw flux rate q) so stored values are
         integrated amounts per timestep.
     time : float
         Calendar year for this timestep [decimal years CE].
