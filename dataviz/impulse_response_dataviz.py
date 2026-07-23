@@ -13,12 +13,11 @@ Reference: Zhou et al. (2025), Nature Climate Change, 15, 59–65.
 import glob
 import os
 
-from dataviz.dataviz import broadcast_to_dataset
+from dataviz.dataviz import broadcast_to_dataset, load_ocim_grid, apply_style
 from oae_tmm.grid import flatten
 from oae_tmm.trace import interp_trace
 import xarray as xr
 import numpy as np
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
@@ -30,23 +29,15 @@ ir_path   = '/Volumes/LaCie/outputs/impulse_response/'
 ir_path   = './outputs/'
 ir_date   = '2026-07-01'  # set to the tag date used when production runs were submitted
 
-fontweight = 'normal'
-textcolor = '#000000'
-mpl.rcParams['font.family']     = 'Calibri'
-mpl.rcParams['font.weight']     = fontweight
-mpl.rcParams['text.color']      = textcolor
-mpl.rcParams['axes.labelcolor'] = textcolor
-mpl.rcParams['xtick.color']     = textcolor
-mpl.rcParams['ytick.color']     = textcolor
+textcolor, fontweight = apply_style()
 _fs = 13
 
-model_data  = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')
-ocnmask     = model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_numpy()
-latitude    = model_data['tlat'].isel(depth=0, longitude=0).to_numpy()
-longitude   = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()
-depth       = model_data['tz'].isel(longitude=0, latitude=0).to_numpy()
-cell_volume = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy()
-model_data.close()
+grid        = load_ocim_grid(data_path)
+ocnmask     = grid['ocnmask']
+latitude    = grid['latitude']
+longitude   = grid['longitude']
+depth       = grid['depth']
+cell_volume = grid['cell_volume']
 rho = 1025  # seawater density [kg m-3]
 
 surf_mask_2d  = ocnmask[:, :, 0]

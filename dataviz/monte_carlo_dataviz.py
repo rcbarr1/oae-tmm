@@ -6,7 +6,7 @@ DATA VIZ FOR EXP26: monte carlo simulation testing air-sea gas exchange paramete
 @author: Reese C. Barrett
 """
 #%%
-from dataviz.dataviz import broadcast_to_dataset
+from dataviz.dataviz import broadcast_to_dataset, load_ocim_grid, apply_style
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,16 +16,13 @@ data_path = './data/'
 output_path = './outputs/'
 # output_path = '/Volumes/LaCie/outputs/'
 
-# open data associated with transport matrix
-model_data = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')
-ocnmask = model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_numpy()
-
-latitude    = model_data['tlat'].isel(depth=0, longitude=0).to_numpy()    # ºN
-longitude   = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()     # ºE
-cell_volume = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy() # m^3
-
-model_data.close()
+grid        = load_ocim_grid(data_path)
+ocnmask     = grid['ocnmask']
+latitude    = grid['latitude']
+longitude   = grid['longitude']
+cell_volume = grid['cell_volume']
 rho = 1025  # seawater density [kg m-3]
+textcolor, fontweight = apply_style()
 
 #%% set experiments we are interested in plotting
 num_mc = 144

@@ -10,11 +10,10 @@ DATA VIZ FOR LCA1: Adding AT to four zones to get efficiency
 #%%
 from oae_tmm.grid import flatten, make_3d, get_depth_idx
 from oae_tmm.trace import calculate_canth, interp_trace
-from dataviz.dataviz import get_co2_scenario, plot_surface2d, plot_surface3d, broadcast_to_dataset, make_surf_animation
+from dataviz.dataviz import broadcast_to_dataset, load_ocim_grid, load_glodap, apply_style
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 import PyCO2SYS as pyco2
 from tqdm import tqdm
 
@@ -23,19 +22,14 @@ data_path = './data/'
 output_path = './outputs/'
 # output_path = '/Volumes/LaCie/outputs/'
 
-# open data associated with transport matrix
-model_data = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')
-ocnmask = model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_numpy()
-
-latitude    = model_data['tlat'].isel(depth=0, longitude=0).to_numpy()    # ºN
-longitude   = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()     # ºE
-depth       = model_data['tz'].isel(longitude=0, latitude=0).to_numpy()   # m below sea surface
-cell_volume = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy() # m^3
-
+grid        = load_ocim_grid(data_path)
+ocnmask     = grid['ocnmask']
+latitude    = grid['latitude']
+longitude   = grid['longitude']
+depth       = grid['depth']
+cell_volume = grid['cell_volume']
 rho = 1025  # seawater density [kg m-3]
 surf_idx = get_depth_idx(ocnmask, 0)
-
-model_data.close()
 
 #%% set experiments we are interested in plotting
 
@@ -70,24 +64,17 @@ linecolors = ['#00429d', '#00429d', '#7a64a8', '#7a64a8',
 ncol = 1
 start_year = 2050
 
-mpl.rcParams['font.family'] = 'Calibri'
-textcolor = '#595959'
-mpl.rcParams['text.color'] = textcolor
-mpl.rcParams['axes.labelcolor'] = textcolor
-mpl.rcParams['xtick.color'] = textcolor
-mpl.rcParams['ytick.color'] = textcolor
-mpl.rcParams['font.weight'] = 'bold'
+textcolor, fontweight = apply_style()
 
 #%% pull in preindustrial baselines
 
-# get GLODAP data
-_glodap = data_path + 'GLODAPv2.2016b.MappedProduct/'
-CT_3d          = xr.open_dataset(_glodap + 'CT.nc')['CT'].values                    # dissolved inorganic carbon [µmol kg-1]
-AT_3d          = xr.open_dataset(_glodap + 'AT.nc')['AT'].values                    # total alkalinity [µmol kg-1]
-temperature_3d = xr.open_dataset(_glodap + 'temperature.nc')['temperature'].values  # temperature [ºC]
-salinity_3d    = xr.open_dataset(_glodap + 'salinity.nc')['salinity'].values        # salinity [unitless]
-silicate_3d    = xr.open_dataset(_glodap + 'silicate.nc')['silicate'].values        # silicate [µmol kg-1]
-phosphate_3d   = xr.open_dataset(_glodap + 'phosphate.nc')['phosphate'].values      # phosphate [µmol kg-1]
+glodap         = load_glodap(data_path)
+CT_3d          = glodap['CT_3d']
+AT_3d          = glodap['AT_3d']
+temperature_3d = glodap['temperature_3d']
+salinity_3d    = glodap['salinity_3d']
+silicate_3d    = glodap['silicate_3d']
+phosphate_3d   = glodap['phosphate_3d']
 
 salinity    = flatten(salinity_3d,    ocnmask)
 temperature = flatten(temperature_3d, ocnmask)

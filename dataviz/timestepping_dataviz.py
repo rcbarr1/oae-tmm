@@ -11,10 +11,9 @@ from pathlib import Path
 import glob
 import os
 
-from dataviz.dataviz import broadcast_to_dataset
+from dataviz.dataviz import broadcast_to_dataset, load_ocim_grid, apply_style
 import xarray as xr
 import numpy as np
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 import cartopy.crs as ccrs
@@ -30,21 +29,14 @@ ir_path     = './outputs/'   # impulse_response --test output; change if run els
 max_AT_date = '2026-06-18'
 ir_date     = '2026-06-23'
 
-model_data  = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')
-ocnmask     = model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_numpy()
-latitude    = model_data['tlat'].isel(depth=0, longitude=0).to_numpy()
-longitude   = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()
-cell_volume = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy()
-model_data.close()
+grid        = load_ocim_grid(data_path)
+ocnmask     = grid['ocnmask']
+latitude    = grid['latitude']
+longitude   = grid['longitude']
+cell_volume = grid['cell_volume']
 rho = 1025  # seawater density [kg m-3]
 
-mpl.rcParams['font.family'] = 'Calibri'
-mpl.rcParams['font.weight'] = 'normal'
-textcolor = '#595959'
-mpl.rcParams['text.color'] = textcolor
-mpl.rcParams['axes.labelcolor'] = textcolor
-mpl.rcParams['xtick.color'] = textcolor
-mpl.rcParams['ytick.color'] = textcolor
+textcolor, fontweight = apply_style()
 _fs = 13
 _display = {'Dekadal': '10-Day', 'Pentadal': '5-Day'}
 
@@ -76,7 +68,7 @@ def _load_max_AT(name, label):
 
         cv = broadcast_to_dataset(cell_volume, ds)
 
-        AT_added = ds['AT_added'] * cv * rho * 1e-6
+        AT_added = ds['AT_added'] * cv * rho * 1e-6 # mol
         exp_vars[f'AT_added_cum_{label}'] = (
             AT_added.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
                     .cumsum(dim='time')
@@ -84,12 +76,12 @@ def _load_max_AT(name, label):
         )
         exp_vars[f'delxCO2_{label}'] = ds['delxCO2'].rename({'time': time_dim})
 
-        delCT = ds['delCT'] * cv * rho * 1e-6
+        delCT = ds['delCT'] * cv * rho * 1e-6 # mol
         exp_vars[f'delCT_{label}'] = (
             delCT.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
                  .rename({'time': time_dim})
         )
-        delAT = ds['delAT'] * cv * rho * 1e-6
+        delAT = ds['delAT'] * cv * rho * 1e-6 # mol
         exp_vars[f'delAT_{label}'] = (
             delAT.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
                  .rename({'time': time_dim})
@@ -188,6 +180,13 @@ max_AT_cache.close()
 #%%  IMPULSE RESPONSE TIMESTEPPING                                              #
 # ============================================================================ #
 
+ir_t_names = ['annually', 'monthly', 'dekadal', 'pentadal', 'daily']
+ir_labels  = ['Annual',   'Monthly', 'Dekadal', 'Pentadal', 'Daily']
+
+# Discover which cell numbers were run by globbing for the daily files
+ir_daily_files = sorted(glob.glob(ir_path + f'impulse_response_{ir_date}_daily_none_*_000.nc'))
+ir_cell_nums   = [int(Path(f).stem.split('_')[-2]) for f in ir_daily_files]
+
 #%% plot impulse_response: --test cell locations on OCIM grid
 surf_mask_2d  = ocnmask[:, :, 0]
 ocn_idxs_surf = np.argwhere(surf_mask_2d == 1)
@@ -213,16 +212,8 @@ ax.legend(fontsize=_fs, frameon=False, loc='lower center',
 plt.tight_layout()
 plt.show()
 
-ir_t_names = ['annually', 'monthly', 'dekadal', 'pentadal', 'daily']
-ir_labels  = ['Annual',   'Monthly', 'Dekadal', 'Pentadal', 'Daily']
-
-# Discover which cell numbers were run by globbing for the daily files
-ir_daily_files = sorted(glob.glob(ir_path + f'impulse_response_{ir_date}_daily_none_*_000.nc'))
-ir_cell_nums   = [int(Path(f).stem.split('_')[-2]) for f in ir_daily_files]
-
 #%% compute or load cached impulse_response time series
 ir_cache_path = ir_path + f'ir_timestepping_cache_{ir_date}.nc'
-
 
 def _load_ir(t_name, label, cell_num):
     time_dim = f'time_{label}_{cell_num}'
@@ -234,7 +225,7 @@ def _load_ir(t_name, label, cell_num):
     with xr.open_mfdataset(files, combine='by_coords', chunks={'time': 10}, parallel=True) as ds:
         cv = broadcast_to_dataset(cell_volume, ds)
 
-        AT_added = ds['AT_added'] * cv * rho * 1e-6
+        AT_added = ds['AT_added'] * cv * rho * 1e-6 # mol
         exp_vars[f'AT_added_cum_{label}_{cell_num}'] = (
             AT_added.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
                     .cumsum(dim='time')
@@ -242,12 +233,12 @@ def _load_ir(t_name, label, cell_num):
         )
         exp_vars[f'delxCO2_{label}_{cell_num}']  = ds['delxCO2'].rename({'time': time_dim})
 
-        delCT = ds['delCT'] * cv * rho * 1e-6
+        delCT = ds['delCT'] * cv * rho * 1e-6 # mol
         exp_vars[f'delCT_{label}_{cell_num}'] = (
             delCT.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
                  .rename({'time': time_dim})
         )
-        delAT = ds['delAT'] * cv * rho * 1e-6
+        delAT = ds['delAT'] * cv * rho * 1e-6 # mol
         exp_vars[f'delAT_{label}_{cell_num}'] = (
             delAT.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
                  .rename({'time': time_dim})

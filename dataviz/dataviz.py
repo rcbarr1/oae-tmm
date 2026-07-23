@@ -1,15 +1,8 @@
-import copy
 import warnings
 
 import matplotlib as mpl
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import matplotlib.colors as mcolors
-from matplotlib.colors import LogNorm
 import xarray as xr
-
-from oae_tmm.grid import make_3d
 
 
 def get_co2_scenario(scenario, time):
@@ -60,126 +53,6 @@ def get_co2_scenario(scenario, time):
     return np.interp(time[0], co2_years, co2_values) * np.ones_like(time)
 
 
-def plot_surface2d(lats, lons, variable, vmin, vmax, cmap, title):
-    """Plot a filled-contour surface map of a 2D lat/lon field.
-
-    Zero-valued cells are masked and rendered in black (intended for land cells).
-
-    Parameters
-    ----------
-    lats, lons : np.ndarray
-        1D arrays of latitudes [°N] and longitudes [°E].
-    variable : np.ndarray
-        2D array of shape (n_lat, n_lon).
-    vmin, vmax : float
-        Colorscale limits.
-    cmap : str or matplotlib.colors.Colormap
-        Colormap name or object.
-    title : str
-        Plot title.
-    """
-    variable_masked = np.ma.masked_where(variable == 0, variable)
-
-    if not isinstance(cmap, mcolors.Colormap):
-        cmap = mpl.colormaps[cmap].copy()
-    else:
-        cmap = copy.copy(cmap)
-    cmap.set_bad(color='black')
-
-    fig, ax = plt.subplots(figsize=(10, 7))
-    levels = np.linspace(vmin - 0.1, vmax, 100)
-    cntr = ax.contourf(lons, lats, variable_masked, levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
-    c = fig.colorbar(cntr, ax=ax)
-    c.set_ticks(np.round(np.linspace(vmin, vmax, 10), 2))
-    ax.set_xlabel('longitude (ºE)')
-    ax.set_ylabel('latitude (ºN)')
-    ax.set_title(title)
-    ax.set_xlim((0, 360))
-    ax.set_ylim((-90, 90))
-
-
-def plot_surface3d(lats, lons, variable, depth_level, vmin, vmax, cmap, title,
-                   logscale=False, lon_lims=None):
-    """Plot a filled-contour surface map of one depth level from a 3D lat/lon/depth field.
-
-    Parameters
-    ----------
-    lats, lons : np.ndarray
-        1D arrays of latitudes [°N] and longitudes [°E].
-    variable : np.ndarray
-        3D array of shape (n_lat, n_lon, n_depth).
-    depth_level : int
-        Depth index to plot.
-    vmin, vmax : float
-        Colorscale limits.
-    cmap : str
-        Matplotlib colormap name.
-    title : str
-        Plot title.
-    logscale : bool, optional
-        If True, use LogNorm colorscale (vmin/vmax are ignored). Default False.
-    lon_lims : tuple of float, optional
-        (lon_min, lon_max) x-axis limits. If None, defaults to [0, 360].
-
-    Returns
-    -------
-    matplotlib.figure.Figure
-    """
-    fig, ax = plt.subplots(figsize=(10, 7), dpi=200)
-
-    if logscale:
-        cntr = ax.contourf(lons, lats, variable[:, :, depth_level],
-                           norm=LogNorm(), cmap=cmap)
-        fig.colorbar(cntr, ax=ax)
-    else:
-        levels = np.linspace(vmin - 1e-7, vmax, 100)
-        cntr = ax.contourf(lons, lats, variable[:, :, depth_level],
-                           levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
-        c = fig.colorbar(cntr, ax=ax)
-        c.set_ticks(np.round(np.linspace(vmin, vmax, 10), 2))
-    ax.set_xlabel('longitude (ºE)')
-    ax.set_ylabel('latitude (ºN)')
-    ax.set_title(title)
-    ax.set_ylim((-90, 90))
-    ax.set_xlim((0, 360) if lon_lims is None else lon_lims)
-
-    return fig
-
-
-def plot_longitude3d(lats, depths, variable, longitude, vmin, vmax, cmap, title):
-    """Plot a filled-contour latitude–depth section at a fixed longitude index.
-
-    Parameters
-    ----------
-    lats : np.ndarray
-        1D array of latitudes [°N].
-    depths : np.ndarray
-        1D array of depth levels [m].
-    variable : np.ndarray
-        3D array of shape (n_lat, n_lon, n_depth).
-    longitude : int
-        Longitude index to slice.
-    vmin, vmax : float
-        Colorscale limits.
-    cmap : str
-        Matplotlib colormap name.
-    title : str
-        Plot title.
-    """
-    fig, ax = plt.subplots(figsize=(10, 7))
-    levels = np.linspace(vmin - 1e-7, vmax, 100)
-    cntr = ax.contourf(lats, depths, variable[:, longitude, :].T,
-                       levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
-    c = fig.colorbar(cntr, ax=ax)
-    c.set_ticks(np.round(np.linspace(vmin, vmax, 10), 2))
-    ax.invert_yaxis()
-    ax.set_xlabel('latitude (ºN)')
-    ax.set_ylabel('depth (m)')
-    ax.set_title(title)
-    ax.set_xlim((-90, 90))
-    ax.set_ylim((depths.max(), 0))
-
-
 def broadcast_to_dataset(array, ds):
     """Wrap a numpy array in an xarray DataArray aligned to a dataset's lat/lon/depth coords.
 
@@ -203,97 +76,83 @@ def broadcast_to_dataset(array, ds):
                         coords={'latitude': ds.latitude, 'longitude': ds.longitude, 'depth': ds.depth})
 
 
-def make_surf_animation(variable, colorbar_label, latitude, longitude, t, nt,
-                        vmin, vmax, cmap, filename):
-    """Animate a surface (depth=0) field over time and save to an mp4 file.
+def load_ocim_grid(data_path):
+    """Load OCIM2-48L grid variables from the base dataset.
 
     Parameters
     ----------
-    variable : xarray.DataArray
-        4D DataArray with dims (time, latitude, longitude, depth); depth=0 slice is plotted.
-    colorbar_label : str
-        Label for the colorbar.
-    latitude, longitude : np.ndarray
-        1D arrays of OCIM2-48L latitudes [°N] and longitudes [°E].
-    t : np.ndarray
-        1D array of time values (decimal years) for frame titles.
-    nt : int
-        Number of frames to render.
-    vmin, vmax : float
-        Colorscale limits.
-    cmap : str
-        Matplotlib colormap name.
-    filename : str
-        Output mp4 path.
+    data_path : str
+        Path to the data directory containing OCIM2_48L_base/.
+
+    Returns
+    -------
+    dict with keys:
+        'ocnmask'     : np.ndarray, shape (n_lat, n_lon, n_depth), 1=ocean 0=land
+        'latitude'    : np.ndarray [°N]
+        'longitude'   : np.ndarray [°E]
+        'depth'       : np.ndarray [m below sea surface]
+        'cell_volume' : np.ndarray [m³]
     """
-    levels = np.linspace(vmin, vmax, 100)
-    fig, ax = plt.subplots(figsize=(10, 7))
-
-    cntr = ax.contourf(longitude, latitude, variable.isel(time=0).values[:, :, 0],
-                       levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
-    fig.colorbar(cntr, ax=ax, label=colorbar_label)
-    ax.set_xlabel('Longitude (ºE)')
-    ax.set_ylabel('Latitude (ºN)')
-    ax.set_title(f't = {t[0]:.3f} yr')
-
-    def update_frame(idx):
-        ax.clear()
-        ax.contourf(longitude, latitude, variable.isel(time=idx).values[:, :, 0],
-                    levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
-        ax.set_xlabel('Longitude (ºE)')
-        ax.set_ylabel('Latitude (ºN)')
-        ax.set_title(f't = {t[idx]:.3f} yr')
-        return []
-
-    ani = animation.FuncAnimation(fig, update_frame, frames=nt, interval=100, blit=False)
-    ani.save(filename, writer=animation.FFMpegWriter(fps=10), dpi=200)
+    model_data = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')
+    grid = {
+        'ocnmask':     model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_numpy(),
+        'latitude':    model_data['tlat'].isel(depth=0, longitude=0).to_numpy(),
+        'longitude':   model_data['tlon'].isel(depth=0, latitude=0).to_numpy(),
+        'depth':       model_data['tz'].isel(longitude=0, latitude=0).to_numpy(),
+        'cell_volume': model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy(),
+    }
+    model_data.close()
+    return grid
 
 
-def make_section_animation(variable, colorbar_label, depth, latitude, t, nt,
-                           vmin, vmax, cmap, filename):
-    """Animate a latitude–depth section at lon index 90 (≈181°E) over time and save to mp4.
+def load_glodap(data_path):
+    """Load GLODAP v2.2016b mapped climatology fields.
 
     Parameters
     ----------
-    variable : xarray.DataArray
-        4D DataArray with dims (time, latitude, longitude, depth).
-    colorbar_label : str
-        Label for the colorbar.
-    depth : np.ndarray
-        1D array of OCIM2-48L depth levels [m].
-    latitude : np.ndarray
-        1D array of OCIM2-48L latitudes [°N].
-    t : np.ndarray
-        1D array of time values (decimal years) for frame titles.
-    nt : int
-        Number of frames to render.
-    vmin, vmax : float
-        Colorscale limits.
-    cmap : str
-        Matplotlib colormap name.
-    filename : str
-        Output mp4 path.
+    data_path : str
+        Path to the data directory containing GLODAPv2.2016b.MappedProduct/.
+
+    Returns
+    -------
+    dict with keys:
+        'CT_3d'          : np.ndarray, dissolved inorganic carbon [µmol kg-1]
+        'AT_3d'          : np.ndarray, total alkalinity [µmol kg-1]
+        'temperature_3d' : np.ndarray, temperature [ºC]
+        'salinity_3d'    : np.ndarray, salinity [unitless]
+        'silicate_3d'    : np.ndarray, silicate [µmol kg-1]
+        'phosphate_3d'   : np.ndarray, phosphate [µmol kg-1]
     """
-    levels = np.linspace(vmin, vmax, 100)
-    fig, ax = plt.subplots(figsize=(10, 7))
+    glodap_path = data_path + 'GLODAPv2.2016b.MappedProduct/'
+    return {
+        'CT_3d':          xr.open_dataset(glodap_path + 'CT.nc')['CT'].values,
+        'AT_3d':          xr.open_dataset(glodap_path + 'AT.nc')['AT'].values,
+        'temperature_3d': xr.open_dataset(glodap_path + 'temperature.nc')['temperature'].values,
+        'salinity_3d':    xr.open_dataset(glodap_path + 'salinity.nc')['salinity'].values,
+        'silicate_3d':    xr.open_dataset(glodap_path + 'silicate.nc')['silicate'].values,
+        'phosphate_3d':   xr.open_dataset(glodap_path + 'phosphate.nc')['phosphate'].values,
+    }
 
-    cntr = ax.contourf(latitude, depth, variable.isel(time=0).values[:, 90, :].T,
-                       levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
-    fig.colorbar(cntr, ax=ax, label=colorbar_label)
-    ax.invert_yaxis()
-    ax.set_xlabel('Latitude (ºN)')
-    ax.set_ylabel('Depth (m)')
-    ax.set_title(f't = {t[0]:.3f} yr at 181ºE')
 
-    def update_frame(idx):
-        ax.clear()
-        ax.contourf(latitude, depth, variable.isel(time=idx).values[:, 90, :].T,
-                    levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
-        ax.invert_yaxis()
-        ax.set_xlabel('Latitude (ºN)')
-        ax.set_ylabel('Depth (m)')
-        ax.set_title(f't = {t[idx]:.3f} yr at 181ºE')
-        return []
+def apply_style():
+    """Apply standard Calibri plot style with black text.
 
-    ani = animation.FuncAnimation(fig, update_frame, frames=nt, interval=100, blit=False)
-    ani.save(filename, writer=animation.FFMpegWriter(fps=10), dpi=200)
+    Sets font family, weight, and all text/tick/label colors globally via
+    matplotlib rcParams.
+
+    Returns
+    -------
+    textcolor : str
+        Text color '#000000', for use in explicit color= kwargs.
+    fontweight : str
+        Font weight 'normal', for use in explicit fontweight= kwargs.
+    """
+    textcolor  = '#000000'
+    fontweight = 'normal'
+    mpl.rcParams['font.family']     = 'Calibri'
+    mpl.rcParams['font.weight']     = fontweight
+    mpl.rcParams['text.color']      = textcolor
+    mpl.rcParams['axes.labelcolor'] = textcolor
+    mpl.rcParams['xtick.color']     = textcolor
+    mpl.rcParams['ytick.color']     = textcolor
+    return textcolor, fontweight

@@ -6,12 +6,11 @@ DATAVIZ FOR MAX_AT: Maximum alkalinity calculation
 @author: Reese C. Barrett
 """
 #%%
-from dataviz.dataviz import broadcast_to_dataset, get_co2_scenario
+from dataviz.dataviz import broadcast_to_dataset, get_co2_scenario, load_ocim_grid, load_glodap, apply_style
 from oae_tmm.grid import flatten, make_3d
 from oae_tmm.trace import calculate_canth
 import xarray as xr
 import numpy as np
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
@@ -25,26 +24,15 @@ data_path = './data/'
 output_path = '/Volumes/LaCie/outputs/max_AT/'
 #output_path = './outputs/'
 
-# open data associated with transport matrix
-model_data = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')
-ocnmask = model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_numpy()
-
-latitude    = model_data['tlat'].isel(depth=0, longitude=0).to_numpy()    # ºN
-longitude   = model_data['tlon'].isel(depth=0, latitude=0).to_numpy()     # ºE
-depth       = model_data['tz'].isel(longitude=0, latitude=0).to_numpy()   # m below sea surface
-cell_volume = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy() # m^3
-
-model_data.close()
+grid        = load_ocim_grid(data_path)
+ocnmask     = grid['ocnmask']
+latitude    = grid['latitude']
+longitude   = grid['longitude']
+depth       = grid['depth']
+cell_volume = grid['cell_volume']
 rho = 1025  # seawater density [kg m-3]
 
-fontweight = 'normal'
-textcolor = '#000000'
-mpl.rcParams['font.family']     = 'Calibri'
-mpl.rcParams['font.weight']     = fontweight
-mpl.rcParams['text.color']      = textcolor
-mpl.rcParams['axes.labelcolor'] = textcolor
-mpl.rcParams['xtick.color']     = textcolor
-mpl.rcParams['ytick.color']     = textcolor
+textcolor, fontweight = apply_style()
 _fs = 13
 
 #%% pull timestepping comparison experiments (generated with --test --exp-id 0-6)
@@ -108,9 +96,9 @@ else:
 
 # %% figure: four-panel full-ocean totals for paper
 # a. cumulative AT added over time
-# b. oae efficiency over time (delCT / delAT)
-# c. change in atmospheric CO2 over time
-# d. deviation from non max AT co2 trajectories
+# b. change in atmospheric CO2 over time & deviation from co2 scenarios
+# c. change in ocean CT content
+# d. oae efficiency over time (delCT / delAT)
 
 fig, axes = plt.subplots(2, 2, figsize=(10, 6), dpi=200)
 
@@ -134,9 +122,9 @@ axes[0][0].text(0.02, 0.97, '(a)', transform=axes[0][0].transAxes,
 
 for label, scenario, color in zip(labels, scenarios, colors):
     time = cache[f'delxCO2_{label}'][f'time_{label}'].values
-    time_extended = np.concatenate([np.arange(2020, 2030, 1), time])
+    time_extended = np.concatenate([pre_time, time])
     atmospheric_co2 = get_co2_scenario(scenario, time_extended)
-    axes[0][1].plot(time, cache[f'delxCO2_{label}'].values + atmospheric_co2[10:], label=label, c=color)
+    axes[0][1].plot(time, cache[f'delxCO2_{label}'].values + atmospheric_co2[len(pre_time):], label=label, c=color)
     axes[0][1].plot(time_extended, atmospheric_co2, label=label, ls=':', c=color)
 axes[0][1].set_xlabel('Year', fontsize=_fs)
 axes[0][1].set_ylabel(r'Atmospheric CO$_2$ (ppm)', fontsize=_fs)
@@ -216,14 +204,13 @@ print(_sep)
 
 #%% load data for pH calculations
 
-# get GLODAP data
-_glodap = data_path + 'GLODAPv2.2016b.MappedProduct/'
-CT_3d          = xr.open_dataset(_glodap + 'CT.nc')['CT'].values                    # dissolved inorganic carbon [µmol kg-1]
-AT_3d          = xr.open_dataset(_glodap + 'AT.nc')['AT'].values                    # total alkalinity [µmol kg-1]
-temperature_3d = xr.open_dataset(_glodap + 'temperature.nc')['temperature'].values  # temperature [ºC]
-salinity_3d    = xr.open_dataset(_glodap + 'salinity.nc')['salinity'].values        # salinity [unitless]
-silicate_3d    = xr.open_dataset(_glodap + 'silicate.nc')['silicate'].values        # silicate [µmol kg-1]
-phosphate_3d   = xr.open_dataset(_glodap + 'phosphate.nc')['phosphate'].values      # phosphate [µmol kg-1]
+glodap         = load_glodap(data_path)
+CT_3d          = glodap['CT_3d']
+AT_3d          = glodap['AT_3d']
+temperature_3d = glodap['temperature_3d']
+salinity_3d    = glodap['salinity_3d']
+silicate_3d    = glodap['silicate_3d']
+phosphate_3d   = glodap['phosphate_3d']
 
 salinity    = flatten(salinity_3d,    ocnmask)
 temperature = flatten(temperature_3d, ocnmask)
@@ -343,19 +330,18 @@ map_proj = ccrs.EqualEarth(central_longitude=200)
 # surface maps of change in pH, Revelle factor, Ω_A (3 rows × 2 cols)
 surface_vars = [
     (r'$\mathrm{pH}$', del_pH_2050_3d[:, :, 0],     del_pH_2100_3d[:, :, 0]),
-    (r'${R_C}$',      del_RC_2050_3d[:, :, 0],     del_RC_2100_3d[:, :, 0]),
+    (r'${R_C}$',       del_RC_2050_3d[:, :, 0],     del_RC_2100_3d[:, :, 0]),
     (r'${\Omega_A}$',  del_omegaA_2050_3d[:, :, 0], del_omegaA_2100_3d[:, :, 0]),
 ]
 
 fig3, axes3 = plt.subplots(3, 2, figsize=(12, 9), dpi=200,
-                            subplot_kw={'projection': map_proj})
+                           subplot_kw={'projection': map_proj})
 
 im_list = []
 for row_idx, (var_label, data_2050, data_2100) in enumerate(surface_vars):
     vmax_row = max(np.nanmax(np.abs(data_2050)), np.nanmax(np.abs(data_2100)))
     for col_idx, (year, data) in enumerate([(2050, data_2050), (2100, data_2100)]):
         axes3[row_idx, col_idx].set_global()
-        axes3[row_idx, col_idx].set_facecolor('#b0cfe0')
         im = axes3[row_idx, col_idx].pcolormesh(longitude, latitude, data,
                                                 cmap='RdBu', vmin=-vmax_row, vmax=vmax_row,
                                                 transform=data_crs)
