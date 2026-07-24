@@ -118,7 +118,7 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
                 )
                 experiments.append(ImpulseResponse(cfg))
     else:
-        time   = np.arange(2022, 2038, 1)
+        time   = np.arange(2022, 2073, 1)
 
         for scenario in ['none', 'ssp126', 'ssp534_OS']:
             for cell_num, ocn_idx in zip(range(len(ocn_idxs)), ocn_idxs):
