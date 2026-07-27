@@ -120,7 +120,7 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     else:
         time   = np.arange(2022, 2073, 1)
 
-        for scenario in ['none', 'ssp126', 'ssp534_OS']:
+        for scenario in ['none', 'ssp245', 'ssp534_OS']:
             for cell_num, ocn_idx in zip(range(len(ocn_idxs)), ocn_idxs):
                 tag = f'{tag_date}_{scenario}_{cell_num:05d}'
                 cfg = ExperimentConfig(

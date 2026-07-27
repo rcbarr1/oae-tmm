@@ -88,18 +88,27 @@ def load_ocim_grid(data_path):
     -------
     dict with keys:
         'ocnmask'     : np.ndarray, shape (n_lat, n_lon, n_depth), 1=ocean 0=land
+        'mldmask'     : np.ndarray, shape (n_lat, n_lon, n_depth), 1=ocean cell within MLD 0=otherwise
         'latitude'    : np.ndarray [°N]
         'longitude'   : np.ndarray [°E]
         'depth'       : np.ndarray [m below sea surface]
         'cell_volume' : np.ndarray [m³]
     """
     model_data = xr.open_dataset(data_path + 'OCIM2_48L_base/OCIM2_48L_base_data.nc')
+    ocnmask     = model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_numpy()
+    cell_volume = model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy()
+    cell_area   = model_data['area'].transpose('latitude', 'longitude', 'depth').to_numpy()
+    cell_top_depth_3d    = model_data['wz'].transpose('latitude', 'longitude', 'depth').to_numpy()
+    cell_bottom_depth_3d = cell_top_depth_3d + cell_volume / cell_area
+    mld     = model_data['mld'].transpose('latitude', 'longitude').to_numpy()
+    mldmask = ((cell_bottom_depth_3d < mld[:, :, None]) * ocnmask).astype(int)
     grid = {
-        'ocnmask':     model_data['ocnmask'].transpose('latitude', 'longitude', 'depth').to_numpy(),
+        'ocnmask':     ocnmask,
+        'mldmask':     mldmask,
         'latitude':    model_data['tlat'].isel(depth=0, longitude=0).to_numpy(),
         'longitude':   model_data['tlon'].isel(depth=0, latitude=0).to_numpy(),
         'depth':       model_data['tz'].isel(longitude=0, latitude=0).to_numpy(),
-        'cell_volume': model_data['vol'].transpose('latitude', 'longitude', 'depth').to_numpy(),
+        'cell_volume': cell_volume,
     }
     model_data.close()
     return grid

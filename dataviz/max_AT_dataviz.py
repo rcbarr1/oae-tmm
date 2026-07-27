@@ -21,11 +21,12 @@ from tqdm.dask import TqdmCallback
 
 # load model architecture
 data_path = './data/'
-output_path = '/Volumes/LaCie/outputs/max_AT/'
-#output_path = './outputs/'
+#output_path = '/Volumes/LaCie/outputs/max_AT/'
+output_path = './outputs/'
 
 grid        = load_ocim_grid(data_path)
 ocnmask     = grid['ocnmask']
+mldmask     = grid['mldmask']
 latitude    = grid['latitude']
 longitude   = grid['longitude']
 depth       = grid['depth']
@@ -36,10 +37,10 @@ textcolor, fontweight = apply_style()
 _fs = 13
 
 #%% pull timestepping comparison experiments (generated with --test --exp-id 0-6)
-experiment_names = ['max_AT_2026-07-01_long_none',
-                    'max_AT_2026-07-01_long_ssp126',
-                    'max_AT_2026-07-01_long_ssp245',
-                    'max_AT_2026-07-01_long_ssp534']
+experiment_names = ['max_AT_2026-07-24_long_none',
+                    'max_AT_2026-07-24_long_ssp126',
+                    'max_AT_2026-07-24_long_ssp245',
+                    'max_AT_2026-07-24_long_ssp534']
 
 labels = ['None', 'SSP1-2.6', 'SSP2-4.5', 'SSP5-3.4 OS']
 scenarios = ['none', 'ssp126', 'ssp245', 'ssp534_OS']
@@ -433,4 +434,24 @@ depth_idx = 12
 print(f'Surface change in pCO2 at 53ºN, 151ºW (2100):\t{del_pCO2_2100_3d[72, 104, 0]:.2f}')
 print(f'{depth[depth_idx]:.0f} m change in pCO2 at 53ºN, 151ºW (2100):\t{del_pCO2_2100_3d[72, 104, depth_idx]:.2f}')
 print(f'Depth difference (m):\t\t\t\t{depth[depth_idx] - depth[0]:.2f}')
+
+#%% statistics: subsurface ocean pH changes
+
+# calculate preindustrial pH
+co2sys_preind = pyco2.sys(dic=flatten(CT_preind_3d, ocnmask),
+                          alkalinity=flatten(AT_3d, ocnmask),
+                          salinity=salinity, temperature=temperature, pressure=pressure,
+                          total_silicate=silicate, total_phosphate=phosphate)
+pH_preind     = co2sys_preind['pH']
+pH_preind_3d  = make_3d(pH_preind, ocnmask)
+print(f'whole ocean preindustrial pH:\t{np.nanmean(pH_preind_3d):.2f}')
+print(f'surface ocean mixed layer preindustrial pH:\t{np.nanmean(pH_preind_3d[mldmask]):.2f}')
+print(f'subsurface preindustrial pH:\t{np.nanmean(pH_preind_3d[~mldmask]):.2f}')
+
+# for SSP2-4.5, when does surface ocean pH mostly hit preindustrial?
+
+# subsurface pH values
+# preindustrial
+# 2100
+# difference
 #%%

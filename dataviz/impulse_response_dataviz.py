@@ -25,9 +25,9 @@ from tqdm.auto import tqdm
 from geopy.distance import geodesic
 
 data_path = './data/'
-ir_path   = '/Volumes/LaCie/outputs/impulse_response/'
+# ir_path   = '/Volumes/LaCie/outputs/impulse_response/'
 ir_path   = './outputs/'
-ir_date   = '2026-07-01'  # set to the tag date used when production runs were submitted
+ir_date   = '2026-07-24'  # set to the tag date used when production runs were submitted
 
 textcolor, fontweight = apply_style()
 _fs = 13
@@ -43,7 +43,7 @@ rho = 1025  # seawater density [kg m-3]
 surf_mask_2d  = ocnmask[:, :, 0]
 ocn_idxs_surf = np.argwhere(surf_mask_2d == 1)  # (N_cells, 2)
 
-scenarios = ['none', 'ssp126', 'ssp534_OS']
+scenarios = ['none', 'ssp245', 'ssp534_OS']
 YEAR_5YR  = 2027   # 5 years after CDR start (2022)
 YEAR_15YR = 2037   # 15 years after CDR start
 
@@ -82,8 +82,8 @@ def _load_final_cache():
         if not all(v in ds for v in expected):
             return None
         cache = {v: ds[v].values for v in expected}
-        if all(np.all(np.isnan(v)) for v in cache.values()):
-            print('  Final cache exists but is all-NaN — recomputing')
+        if any(np.all(np.isnan(v)) for v in cache.values()):
+            print('  Final cache incomplete (some scenarios all-NaN) — recomputing')
             return None
         return cache
 
@@ -168,7 +168,7 @@ if eta_cache is None:
 
 _scenario_labels = {
     'none':      'No SSP',
-    'ssp126':    'SSP1-2.6',
+    'ssp245':    'SSP2-4.5',
     'ssp534_OS': 'SSP5-3.4 OS',
 }
 _row_labels = [r'$\eta$ at 5 years', r'$\eta$ at 15 years']
@@ -263,7 +263,7 @@ for horizon, _ in _horizons:
 print(_sep)
 
 # North Pacific example
-data = eta_cache[f'eta_15yr_ssp126'] 
+data = eta_cache[f'eta_15yr_ssp245'] 
 print(f"\neta at (49.5 ºN, 201 ºE): {data[70, 100] * 100:.2f}%")
 print(f"eta at (41.5 ºN, 201 ºE): {data[66, 100] * 100:.2f}%")
 distance = geodesic((latitude[70], longitude[100]), (latitude[66], longitude[100])).km
