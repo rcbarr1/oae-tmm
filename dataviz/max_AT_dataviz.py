@@ -8,7 +8,7 @@ DATAVIZ FOR MAX_AT: Maximum alkalinity calculation
 #%%
 from dataviz.dataviz import broadcast_to_dataset, get_co2_scenario, load_ocim_grid, load_glodap, apply_style
 from oae_tmm.grid import flatten, make_3d
-from oae_tmm.trace import calculate_canth
+from oae_tmm.trace import calculate_canth, interp_trace
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
@@ -444,14 +444,70 @@ co2sys_preind = pyco2.sys(dic=flatten(CT_preind_3d, ocnmask),
                           total_silicate=silicate, total_phosphate=phosphate)
 pH_preind     = co2sys_preind['pH']
 pH_preind_3d  = make_3d(pH_preind, ocnmask)
-print(f'whole ocean preindustrial pH:\t{np.nanmean(pH_preind_3d):.2f}')
-print(f'surface ocean mixed layer preindustrial pH:\t{np.nanmean(pH_preind_3d[mldmask]):.2f}')
-print(f'subsurface preindustrial pH:\t{np.nanmean(pH_preind_3d[~mldmask]):.2f}')
 
-# for SSP2-4.5, when does surface ocean pH mostly hit preindustrial?
+print(f'whole ocean preindustrial pH:\t{np.average(flatten(pH_preind_3d, ocnmask), weights=flatten(cell_volume, ocnmask)):.2f}')
+avg_surf_pH_preind = np.average(flatten(pH_preind_3d, mldmask), weights=flatten(cell_volume, mldmask))
+print(f'surface ocean mixed layer preindustrial pH:\t{avg_surf_pH_preind:.2f}')
 
-# subsurface pH values
-# preindustrial
-# 2100
-# difference
+# weighted avg mixed layer pH under SSP2-4.5 max OAE over time
+salinity_mld    = flatten(salinity_3d,    mldmask)
+temperature_mld = flatten(temperature_3d, mldmask)
+silicate_mld    = flatten(silicate_3d,    mldmask)
+phosphate_mld   = flatten(phosphate_3d,   mldmask)
+pressure_mld    = flatten(pressure_3d,    mldmask)
+weights_mld     = flatten(cell_volume,    mldmask)
+CT_preind_mld   = flatten(CT_preind_3d,   mldmask)
+AT_mld          = flatten(AT_3d,          mldmask)
+
+with xr.open_mfdataset(
+        output_path + experiment_names[2] + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True) as ds:
+    time_surf_pH = ds['time'].values
+    with TqdmCallback(desc='Loading delCT/delAT for surface pH'):
+        ds_surf = ds[['delCT', 'delAT']].compute()
+delCT_ts = ds_surf['delCT'].values
+delAT_ts = ds_surf['delAT'].values
+
+avg_surf_pH_OAE_ts = np.full(len(time_surf_pH), np.nan)
+for i, t in enumerate(tqdm(time_surf_pH, desc='Computing surface pH time series')):
+    Canth_t  = interp_trace(data_path, t, 'ssp245', latitude, longitude, depth, ocnmask)
+    CT_t_mld = CT_preind_mld + flatten(Canth_t, mldmask) + flatten(delCT_ts[i], mldmask)
+    AT_t_mld = AT_mld + flatten(delAT_ts[i], mldmask)
+    co2sys_t = pyco2.sys(dic=CT_t_mld, alkalinity=AT_t_mld,
+                         salinity=salinity_mld, temperature=temperature_mld, pressure=pressure_mld,
+                         total_silicate=silicate_mld, total_phosphate=phosphate_mld)
+    avg_surf_pH_OAE_ts[i] = np.average(co2sys_t['pH'], weights=weights_mld)
+
+within_5pct  = np.abs(avg_surf_pH_OAE_ts - avg_surf_pH_preind) / avg_surf_pH_preind < 0.05
+crossing_idx = np.where(within_5pct)[0]
+if len(crossing_idx) > 0:
+    recovery_year = time_surf_pH[crossing_idx[0]]
+    print(f'Year surface pH within 5% of preindustrial: {recovery_year:.0f}')
+else:
+    recovery_year = None
+    print('Surface pH never recovers to within 5% of preindustrial within simulation')
+
+fig_surf_pH, ax_surf_pH = plt.subplots(figsize=(8, 4), dpi=200)
+ax_surf_pH.plot(time_surf_pH, avg_surf_pH_OAE_ts, label='SSP2-4.5 max OAE', c=colors[2])
+ax_surf_pH.axhline(avg_surf_pH_preind, color=textcolor, ls='--', label='Preindustrial')
+if recovery_year is not None:
+    ax_surf_pH.axvline(recovery_year, color='gray', ls=':', label=f'Within 5% (year {recovery_year:.0f})')
+ax_surf_pH.set_xlabel('Year', fontsize=_fs)
+ax_surf_pH.set_ylabel('Avg Mixed Layer pH', fontsize=_fs)
+ax_surf_pH.set_xlim([time_surf_pH[0], time_surf_pH[-1]])
+ax_surf_pH.legend(fontsize=_fs, frameon=False)
+ax_surf_pH.tick_params(labelsize=_fs)
+for side in ('top', 'bottom', 'left', 'right'):
+    ax_surf_pH.spines[side].set_color(textcolor)
+plt.tight_layout()
+
+# calculate
+avg_subsurf_pH_2100_OAE = np.average(flatten(pH_OAE_2100_3d, ocnmask & ~mldmask), weights=flatten(cell_volume, ocnmask & ~mldmask))
+avg_subsurf_pH_preind = np.average(flatten(pH_preind_3d, ocnmask & ~mldmask), weights=flatten(cell_volume, ocnmask & ~mldmask))
+print(f'subsurface pH in 2100 (SSP2-4.5 w/max OAE):\t{avg_subsurf_pH_2100_OAE:.2f}')
+print(f'subsurface preindustrial pH:\t{avg_subsurf_pH_preind:.2f}')
+print(f'preindustrial - 2100:\t{(avg_subsurf_pH_preind - avg_subsurf_pH_2100_OAE):.2f}')
+
 #%%

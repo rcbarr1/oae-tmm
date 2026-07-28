@@ -18,3 +18,4 @@ Dockerfile
 .vscode
 .env
 *.asv
+*.slurm

@@ -14,6 +14,7 @@ import glob
 import os
 
 from dataviz.dataviz import broadcast_to_dataset, load_ocim_grid, apply_style
+from scipy.spatial import KDTree
 from oae_tmm.grid import flatten
 from oae_tmm.trace import interp_trace
 import xarray as xr
@@ -46,6 +47,7 @@ ocn_idxs_surf = np.argwhere(surf_mask_2d == 1)  # (N_cells, 2)
 scenarios = ['none', 'ssp245', 'ssp534_OS']
 YEAR_5YR  = 2027   # 5 years after CDR start (2022)
 YEAR_15YR = 2037   # 15 years after CDR start
+YEAR_50YR = 2072   # 50 years after CDR start
 
 
 #%% validity check
@@ -77,7 +79,7 @@ def _load_final_cache():
     """Return dict of 6 eta arrays from the .nc cache, or None if incomplete."""
     if not os.path.exists(final_cache_path):
         return None
-    expected = [f'eta_{h}_{s}' for s in scenarios for h in ('5yr', '15yr')]
+    expected = [f'eta_{h}_{s}' for s in scenarios for h in ('5yr', '15yr', '50yr')]
     with xr.open_dataset(final_cache_path) as ds:
         if not all(v in ds for v in expected):
             return None
@@ -96,6 +98,7 @@ def _compute_scenario(scenario):
     """
     eta_5yr  = np.full(surf_mask_2d.shape, np.nan)
     eta_15yr = np.full(surf_mask_2d.shape, np.nan)
+    eta_50yr = np.full(surf_mask_2d.shape, np.nan)
 
     for cell_num, (lat_idx, lon_idx) in enumerate(
             tqdm(ocn_idxs_surf, desc=f'Computing η [{scenario}]')):
@@ -123,28 +126,33 @@ def _compute_scenario(scenario):
                     eta.sel(time=YEAR_5YR,  method='nearest', tolerance=0.5).values)
                 eta_15yr[lat_idx, lon_idx] = float(
                     eta.sel(time=YEAR_15YR, method='nearest', tolerance=0.5).values)
+                if float(ds.time.values[-1]) >= YEAR_50YR:
+                    eta_50yr[lat_idx, lon_idx] = float(
+                        eta.sel(time=YEAR_50YR, method='nearest', tolerance=0.5).values)
 
         except Exception as e:
             print(f'  Failed cell {cell_num}: {e}')
 
-    return eta_5yr, eta_15yr
+    return eta_5yr, eta_15yr, eta_50yr
 
 
 def _load_or_compute_scenario(scenario):
-    """Return (eta_5yr, eta_15yr) from .npy intermediates or by computing."""
+    """Return (eta_5yr, eta_15yr, eta_50yr) from .npy intermediates or by computing."""
     p5  = _npy_path(scenario, '5yr')
     p15 = _npy_path(scenario, '15yr')
+    p50 = _npy_path(scenario, '50yr')
 
-    if os.path.exists(p5) and os.path.exists(p15):
-        eta_5yr, eta_15yr = np.load(p5), np.load(p15)
+    if os.path.exists(p5) and os.path.exists(p15) and os.path.exists(p50):
+        eta_5yr, eta_15yr, eta_50yr = np.load(p5), np.load(p15), np.load(p50)
         if np.any(np.isfinite(eta_5yr)) or np.any(np.isfinite(eta_15yr)):
-            return eta_5yr, eta_15yr
+            return eta_5yr, eta_15yr, eta_50yr
         print(f'  [{scenario}] cached .npy files are all-NaN — recomputing')
 
-    eta_5yr, eta_15yr = _compute_scenario(scenario)
+    eta_5yr, eta_15yr, eta_50yr = _compute_scenario(scenario)
     np.save(p5,  eta_5yr)
     np.save(p15, eta_15yr)
-    return eta_5yr, eta_15yr
+    np.save(p50, eta_50yr)
+    return eta_5yr, eta_15yr, eta_50yr
 
 
 eta_cache = _load_final_cache()
@@ -152,9 +160,10 @@ eta_cache = _load_final_cache()
 if eta_cache is None:
     eta_cache = {}
     for scenario in scenarios:
-        eta_5, eta_15 = _load_or_compute_scenario(scenario)
+        eta_5, eta_15, eta_50 = _load_or_compute_scenario(scenario)
         eta_cache[f'eta_5yr_{scenario}']  = eta_5
         eta_cache[f'eta_15yr_{scenario}'] = eta_15
+        eta_cache[f'eta_50yr_{scenario}'] = eta_50
 
     ds_out = xr.Dataset(
         {k: xr.DataArray(v, dims=['latitude', 'longitude'],
@@ -289,5 +298,53 @@ for horizon, year in _horizons:
         _row += f"{float(_Canth):>{_vw - 1}.2f}"
     print(_row)
 print(_sep)
+
+# spatial variation within 500 km (≈ equivalent circular radius of a median Zhou et al. open-ocean patch)
+R_EARTH_KM = 6371.0
+RADIUS_KM  = 500.0
+chord_dist = 2 * np.sin(RADIUS_KM / (2 * R_EARTH_KM))
+
+lats_r = np.radians(latitude[ocn_idxs_surf[:, 0]])
+lons_r = np.radians(longitude[ocn_idxs_surf[:, 1]])
+xyz = np.column_stack([
+    np.cos(lats_r) * np.cos(lons_r),
+    np.cos(lats_r) * np.sin(lons_r),
+    np.sin(lats_r),
+])
+tree = KDTree(xyz)
+neighbor_lists = tree.query_ball_point(xyz, chord_dist)
+
+ice_flat = (f_ice <= 0.05)[ocn_idxs_surf[:, 0], ocn_idxs_surf[:, 1]]
+
+_slices = [
+    ('5yr',  eta_cache['eta_5yr_ssp245']),
+    ('15yr', eta_cache['eta_15yr_ssp245']),
+    ('50yr', eta_cache['eta_50yr_ssp245']),
+]
+
+_lw3   = 6
+_vw3   = 16
+_hdrs3 = ['Max range', '95th pct range', 'Mean range']
+_sep3  = '=' * (_lw3 + _vw3 * len(_hdrs3))
+
+print(f'\nSpatial variation within {RADIUS_KM:.0f} km radius (SSP2-4.5, ice-free, %)')
+print(f'(≈ equivalent circular radius of Zhou et al. median open-ocean patch, area = 7.2×10⁵ km²)')
+print(_sep3)
+print(f"{'':>{_lw3}}" + ''.join(f"{h:>{_vw3}}" for h in _hdrs3))
+for horizon, eta_2d in _slices:
+    eta_flat = eta_2d[ocn_idxs_surf[:, 0], ocn_idxs_surf[:, 1]]
+    ranges = np.array([
+        (np.nanmax(eta_flat[nb]) - np.nanmin(eta_flat[nb]))
+        if np.any(np.isfinite(eta_flat[nb])) else np.nan
+        for nb in neighbor_lists
+    ])
+    valid = ice_flat & np.isfinite(ranges)
+    r = ranges[valid]
+    _row  = f"{horizon:>{_lw3}}"
+    _row += f"{float(np.max(r) * 100):>{_vw3 - 1}.2f}%"
+    _row += f"{float(np.percentile(r, 95) * 100):>{_vw3 - 1}.2f}%"
+    _row += f"{float(np.mean(r) * 100):>{_vw3 - 1}.2f}%"
+    print(_row)
+print(_sep3)
 
 #%%
