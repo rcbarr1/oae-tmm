@@ -11,6 +11,7 @@ CLI usage:
     python -m experiments.max_AT --list
     python -m experiments.max_AT --test --list
     python -m experiments.max_AT --test --exp-id 0-6
+    python -m experiments.max_AT --exp-id 2 3 --resume --date 2026-07-24
 """
 
 import gc
@@ -53,7 +54,7 @@ class MaxAT(BaseExperiment):
         return q
 
 
-def build_experiments(data_path: str, output_path: str, test: bool = False) -> list:
+def build_experiments(data_path: str, output_path: str, test: bool = False, tag_date: str = None) -> list:
     """Return a list of MaxAT instances covering all parameter combinations.
 
     In test mode: 7 timestep resolutions × scenario='none', 5-year runs.
@@ -68,7 +69,10 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     q_AT_mask = flatten(grid['mldmask'], ocnmask)
 
     start_CDR = 2030.0
-    
+
+    if tag_date is None:
+        tag_date = datetime.now().strftime('%Y-%m-%d')
+
     if test:
         t0 = np.arange(2030, 2030.25, 1/360)           # daily, first 90 days
         t1 = np.arange(2030.25, 2035.084, 1/12)        # monthly
@@ -90,7 +94,6 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
         ]
         scenarios = ['none', 'ssp126', 'ssp245', 'ssp534_OS']
 
-    tag_date = datetime.now().strftime('%Y-%m-%d')
     experiments = []
     for t_name, time in t_configs:
         for scenario in scenarios:

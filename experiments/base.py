@@ -312,30 +312,51 @@ class BaseExperiment(ABC):
             base = base[:-3]
         return f'{base}_{file_number:03d}.nc'
 
-    def run(self):
-        """Run the full simulation and write NetCDF output.
+    @staticmethod
+    def _truncate_to(path: str, keep_n: int) -> None:
+        """Rewrite path keeping only the first keep_n time records (in-place via a temp file)."""
+        import os
+        from netCDF4 import Dataset as NCDataset
 
-        Calls setup() then steps through self.cfg.time[1:]. At each step,
-        Canth is updated from TRACE (if scenario != 'none'), carbonate
-        chemistry is recomputed from the current state, the A matrix is
-        rebuilt, make_q() is called for the CDR source, and c is advanced
-        one implicit Euler step. Only c (current state) and q (current
-        source/sink) are held in memory at any time — output is written
-        directly to disk at output_freq rather than accumulated in arrays.
+        tmp_path = path + '.tmp'
+        try:
+            with NCDataset(path, 'r') as src, NCDataset(tmp_path, 'w', format='NETCDF4') as dst:
+                dst.setncatts({a: src.getncattr(a) for a in src.ncattrs()})
+                for name, dim in src.dimensions.items():
+                    dst.createDimension(name, None if dim.isunlimited() else len(dim))
+                for name, var in src.variables.items():
+                    chunking = var.chunking()
+                    kw = {}
+                    if chunking != 'contiguous':
+                        kw['chunksizes'] = chunking
+                        kw['zlib'] = True
+                        kw['complevel'] = 4
+                    v = dst.createVariable(name, var.datatype, var.dimensions, **kw)
+                    for attr in var.ncattrs():
+                        v.setncattr(attr, var.getncattr(attr))
+                    if var.dimensions and var.dimensions[0] == 'time':
+                        v[:] = var[:keep_n]
+                    else:
+                        v[:] = var[:]
+            os.replace(tmp_path, path)
+        except Exception:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
 
-        When max_steps_per_file > 0, output is split across multiple files
-        named {base}_000.nc, {base}_001.nc, etc. Each file is synced to
-        disk every 20 writes to limit data loss on job failure.
+    def _run_from(self, c: np.ndarray, start_idx: int, file_number: int):
+        """Time-stepping loop starting from state c at time[start_idx].
+
+        When start_idx == 0, writes the initial condition to a new file first.
+        Otherwise assumes existing files already cover time[0:start_idx] and
+        begins writing from time[start_idx] into a new file numbered file_number.
+        Each file is synced every 20 writes and rolled over after max_steps_per_file
+        records (when max_steps_per_file > 0).
         """
-        self.setup()
-
         ocnmask = self.grid['ocnmask']
         time = self.cfg.time
         dts  = np.diff(time, prepend=np.nan)
 
-        c = np.zeros(1 + 2 * self.m)
-
-        file_number         = 0
         write_count_in_file = 0
         ds = output.open_simulation_output(
             self._output_path(file_number),
@@ -346,22 +367,19 @@ class BaseExperiment(ABC):
             attrs=self.cfg.attrs,
         )
         try:
-            # write initial conditions (all zeros) at time[0]
-            output.write_simulation_step(ds, c, np.zeros_like(c), time[0], ocnmask)
-            write_count_in_file += 1
+            if start_idx == 0:
+                output.write_simulation_step(ds, c, np.zeros_like(c), time[0], ocnmask)
+                write_count_in_file += 1
 
-            for i in tqdm(range(1, len(time))):
-                dt        = dts[i]
+            for i in tqdm(range(max(start_idx, 1), len(time))):
+                dt           = dts[i]
                 time_current = time[i]
 
-                # update Canth from TRACE for the current calendar year
                 if self.cfg.scenario != 'none':
                     self.Canth = flatten(self._calc_canth(time_current, self.cfg.scenario), ocnmask)
 
-                # recompute carbonate chemistry from current state
                 chem = self._calc_step_chemistry(c)
 
-                # rebuild A (chemistry parameters change each step)
                 A = transport.build_A_matrix(
                     self.grid['TR'], self.k, self.surf['f_ice'], self.grid['cell_volume'],
                     chem['R_C'], chem['R_A'],
@@ -377,7 +395,6 @@ class BaseExperiment(ABC):
                 c = transport.solve_timestep(A, c, q, dt)
 
                 if i % self.cfg.output_freq == 0:
-                    # roll over to a new file if this one is full
                     if (self.cfg.max_steps_per_file > 0 and
                             write_count_in_file >= self.cfg.max_steps_per_file):
                         ds.close()
@@ -398,6 +415,113 @@ class BaseExperiment(ABC):
                         ds.sync()
         finally:
             ds.close()
+
+    def run(self):
+        """Run the full simulation from scratch and write NetCDF output."""
+        self.setup()
+        self._run_from(np.zeros(1 + 2 * self.m), 0, 0)
+
+    def resume(self):
+        """Resume from the last fully-synced timestep in existing output files.
+
+        Scans backwards from the second-to-last record (the last is always skipped
+        as a potential partial write) to find the deepest record where delxCO2 is
+        not masked. Up to ~19 trailing records may be masked if the process crashed
+        between sync() calls. All records after the checkpoint are truncated before
+        resuming. New output goes to the next numbered file.
+
+        If no valid records are found in the last file it is deleted and the final
+        record of the previous file is used as the checkpoint.
+
+        Raises FileNotFoundError if no existing output files are found.
+        Raises NotImplementedError for single-file mode (max_steps_per_file=0).
+        Raises RuntimeError if there is insufficient valid history to roll back.
+        """
+        import glob
+        import os
+        from netCDF4 import Dataset as NCDataset
+
+        if self.cfg.max_steps_per_file == 0:
+            raise NotImplementedError(
+                'resume() requires multi-file output (max_steps_per_file > 0)')
+
+        self.setup()
+
+        base = self.cfg.output_path
+        if base.endswith('.nc'):
+            base = base[:-3]
+        existing = sorted(glob.glob(f'{base}_*.nc'))
+        if not existing:
+            raise FileNotFoundError(
+                f'No output files found matching {base}_*.nc; use run() instead')
+
+        # Scan backwards from n_last-2 (skip last record, it may be a partial write)
+        # to find the deepest record where delxCO2 is not masked (synced to disk).
+        checkpoint_idx = None
+        checkpoint_time = None
+        delxCO2_c = delCT_c = delAT_c = None
+
+        with NCDataset(existing[-1], 'r') as ncf:
+            n_last = len(ncf.variables['time'])
+            for idx in range(n_last - 2, -1, -1):
+                if not np.ma.is_masked(ncf.variables['delxCO2'][idx]):
+                    checkpoint_idx  = idx
+                    checkpoint_time = float(ncf.variables['time'][idx])
+                    delxCO2_c       = float(ncf.variables['delxCO2'][idx]) / 1e6
+                    delCT_c         = np.array(ncf.variables['delCT'][idx])
+                    delAT_c         = np.array(ncf.variables['delAT'][idx])
+                    break
+
+        if checkpoint_idx is not None:
+            keep_n = checkpoint_idx + 1
+            if keep_n < n_last:
+                print(f'Truncating {n_last - keep_n} trailing record(s) from {existing[-1]} ...')
+                BaseExperiment._truncate_to(existing[-1], keep_n)
+            file_number = len(existing)
+        else:
+            # No valid records found in the last file — discard it and scan the previous file.
+            if len(existing) < 2:
+                raise RuntimeError(
+                    'Cannot resume: no valid records found; '
+                    'not enough history to roll back')
+            print(f'Removing file with no valid records: {existing[-1]} ...')
+            os.remove(existing[-1])
+            existing = existing[:-1]
+            with NCDataset(existing[-1], 'r') as ncf:
+                n_prev = len(ncf.variables['time'])
+                checkpoint_idx = None
+                for idx in range(n_prev - 1, -1, -1):
+                    if not np.ma.is_masked(ncf.variables['delxCO2'][idx]):
+                        checkpoint_idx  = idx
+                        checkpoint_time = float(ncf.variables['time'][idx])
+                        delxCO2_c       = float(ncf.variables['delxCO2'][idx]) / 1e6
+                        delCT_c         = np.array(ncf.variables['delCT'][idx])
+                        delAT_c         = np.array(ncf.variables['delAT'][idx])
+                        break
+            if checkpoint_idx is None:
+                raise RuntimeError(
+                    'Cannot resume: no valid records found in previous file either')
+            if checkpoint_idx < n_prev - 1:
+                print(f'Truncating {n_prev - 1 - checkpoint_idx} trailing record(s) from {existing[-1]} ...')
+                BaseExperiment._truncate_to(existing[-1], checkpoint_idx + 1)
+            file_number = len(existing)
+
+        ocnmask = self.grid['ocnmask']
+        c = np.zeros(1 + 2 * self.m)
+        c[0]            = delxCO2_c
+        c[1:(self.m+1)] = flatten(delCT_c, ocnmask)
+        c[(self.m+1):]  = flatten(delAT_c, ocnmask)
+
+        time      = self.cfg.time
+        start_idx = int(np.searchsorted(time, checkpoint_time, side='right'))
+        if start_idx >= len(time):
+            print(f'Simulation already complete (checkpoint time: {checkpoint_time:.6f})')
+            return
+
+        print(f'Resuming from checkpoint t={checkpoint_time:.6f}, '
+              f'next step t={time[start_idx]:.6f} '
+              f'(step {start_idx}/{len(time)-1})')
+        self._run_from(c, start_idx, file_number)
 
 
 def run_cli(build_experiments, description: str = ''):
@@ -423,12 +547,14 @@ def run_cli(build_experiments, description: str = ''):
     parser.add_argument('--exp-id', nargs='+', help='experiment index or range (e.g. 0 2 5-10)')
     parser.add_argument('--list',   action='store_true', help='list all experiments and exit')
     parser.add_argument('--test',   action='store_true', help='run a short test experiment')
+    parser.add_argument('--resume', action='store_true', help='resume from last saved checkpoint')
+    parser.add_argument('--date',   default=None,        help='tag date for output paths (YYYY-MM-DD); defaults to today. Use with --resume when the original run was on a different date.')
     args = parser.parse_args()
 
     data_path   = './data/'
     output_path = './outputs/'
 
-    experiments = build_experiments(data_path, output_path, test=args.test)
+    experiments = build_experiments(data_path, output_path, test=args.test, tag_date=args.date)
 
     if args.list:
         print(f'total experiments: {len(experiments)}')
@@ -438,7 +564,10 @@ def run_cli(build_experiments, description: str = ''):
 
     if args.exp_id is None:
         if args.test:
-            experiments[0].run()
+            if args.resume:
+                experiments[0].resume()
+            else:
+                experiments[0].run()
             return
         parser.error('--exp-id is required; use --list to see all experiments')
 
@@ -448,4 +577,7 @@ def run_cli(build_experiments, description: str = ''):
         parser.error(f'invalid exp-id(s): {invalid}; must be 0 to {len(experiments) - 1}')
 
     for exp_id in exp_ids:
-        experiments[exp_id].run()
+        if args.resume:
+            experiments[exp_id].resume()
+        else:
+            experiments[exp_id].run()

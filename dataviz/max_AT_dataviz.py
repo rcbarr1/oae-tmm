@@ -36,6 +36,10 @@ rho = 1025  # seawater density [kg m-3]
 textcolor, fontweight = apply_style()
 _fs = 13
 
+plot_start       = 2020   # pre-CDR period start for plots
+start_simulation = 2030   # simulation start year
+end_year         = 2100   # simulation end year
+
 #%% pull timestepping comparison experiments (generated with --test --exp-id 0-6)
 experiment_names = ['max_AT_2026-07-24_long_none',
                     'max_AT_2026-07-24_long_ssp126',
@@ -76,15 +80,22 @@ def _load_experiment(experiment_name, label):
         exp_vars[f'delAT_{label}'] = delAT.sum(dim=['latitude', 'longitude', 'depth'], skipna=True).rename({'time': time_dim})
     return exp_vars
 
+_expected_end = float(np.arange(start_simulation, end_year, 1/360)[-1])
+
 if os.path.exists(cache_path):
     cache = xr.open_dataset(cache_path).load()
-    missing = [(exp, lbl) for exp, lbl in zip(experiment_names, labels)
-               if f'AT_added_cum_{lbl}' not in cache]
-    if missing:
+    stale = [(exp, lbl) for exp, lbl in zip(experiment_names, labels)
+             if f'AT_added_cum_{lbl}' not in cache
+             or float(cache[f'time_{lbl}'].values[-1]) < _expected_end - 0.01]
+    if stale:
+        stale_labels = [lbl for _, lbl in stale]
+        drop_vars   = [v  for v  in cache.data_vars if any(v.endswith(f'_{lbl}')  for lbl in stale_labels)]
+        drop_coords = [co for co in cache.coords    if any(co == f'time_{lbl}'    for lbl in stale_labels)]
+        cache = cache.drop_vars(drop_vars + drop_coords, errors='ignore')
         new_vars = {}
-        for exp_name, label in tqdm(missing, desc='Computing missing experiments'):
+        for exp_name, label in tqdm(stale, desc='Computing stale/missing experiments'):
             new_vars.update(_load_experiment(exp_name, label))
-        with TqdmCallback(desc='Computing missing cache entries'):
+        with TqdmCallback(desc='Computing cache entries'):
             cache = xr.merge([cache, xr.Dataset(new_vars).compute()])
         cache.to_netcdf(cache_path)
 else:
@@ -103,7 +114,7 @@ else:
 
 fig, axes = plt.subplots(2, 2, figsize=(10, 6), dpi=200)
 
-pre_time = np.arange(2020, 2030, 1)
+pre_time = np.arange(plot_start, start_simulation, 1)
 pre_zeros = np.zeros(len(pre_time))
 
 for label, color in zip(labels, colors):
@@ -113,7 +124,7 @@ for label, color in zip(labels, colors):
                     label=label, c=color)
 axes[0][0].set_xlabel('Year', fontsize=_fs)
 axes[0][0].set_ylabel(r'Cumulative ${A_{\mathrm{T}}}$ Added (mol)', fontsize=_fs)
-axes[0][0].set_xlim([2020, 2100])
+axes[0][0].set_xlim([plot_start, end_year])
 axes[0][0].legend(fontsize=_fs, frameon=False)
 for side in ('top', 'bottom', 'left', 'right'):
     axes[0][0].spines[side].set_color(textcolor)
@@ -129,7 +140,7 @@ for label, scenario, color in zip(labels, scenarios, colors):
     axes[0][1].plot(time_extended, atmospheric_co2, label=label, ls=':', c=color)
 axes[0][1].set_xlabel('Year', fontsize=_fs)
 axes[0][1].set_ylabel(r'Atmospheric CO$_2$ (ppm)', fontsize=_fs)
-axes[0][1].set_xlim([2020, 2100])
+axes[0][1].set_xlim([plot_start, end_year])
 for side in ('top', 'bottom', 'left', 'right'):
     axes[0][1].spines[side].set_color(textcolor)
 axes[0][1].tick_params(labelsize=_fs)
@@ -143,7 +154,7 @@ for label, color in zip(labels, colors):
                     label=label, c=color)
 axes[1][0].set_xlabel('Year', fontsize=_fs)
 axes[1][0].set_ylabel(r'Change in $C_{\mathrm{T}}$ Content (mol)', fontsize=_fs)
-axes[1][0].set_xlim([2020, 2100])
+axes[1][0].set_xlim([plot_start, end_year])
 for side in ('top', 'bottom', 'left', 'right'):
     axes[1][0].spines[side].set_color(textcolor)
 axes[1][0].tick_params(labelsize=_fs)
@@ -158,7 +169,7 @@ for label, color in zip(labels, colors):
     axes[1][1].plot(time, efficiency, label=label, c=color)
 axes[1][1].set_xlabel('Year', fontsize=_fs)
 axes[1][1].set_ylabel(r'OAE Efficiency: ${C_{\mathrm{T}}}^{\prime}$ / ${A_{\mathrm{T}}}^{\prime}$ (%)', fontsize=_fs)
-axes[1][1].set_xlim([2020, 2100])
+axes[1][1].set_xlim([plot_start, end_year])
 for side in ('top', 'bottom', 'left', 'right'):
     axes[1][1].spines[side].set_color(textcolor)
 axes[1][1].tick_params(labelsize=_fs)
@@ -176,26 +187,23 @@ _lw  = 16
 _vw  = 16
 _sep = '=' * (_lw + _vw * len(_tbl_vars))
 
-year = 2075
-start_year = 2020
-start_CDR = 2030
 labels = ['None', 'SSP1-2.6', 'SSP2-4.5', 'SSP5-3.4 OS']
 scenarios = ['none', 'ssp126', 'ssp245', 'ssp534_OS']
 
-print(f'Total Ocean Changes Statistics {year}')
+print(f'Total Ocean Changes Statistics {end_year}')
 print(_sep)
 print(f"{'':>{_lw}}" + ''.join(f"{h:>{_vw}}" for h in _tbl_vars))
 
 for label, scenario in zip(labels, scenarios):
     _row = f"{label:<{_lw}}"
-    AT_added = cache[f'AT_added_cum_{label}'].sel({f'time_{label}': year}, method='nearest', tolerance=0.5).values * 1e-15
-    delAT = cache[f'delAT_{label}'].sel({f'time_{label}': year}, method='nearest', tolerance=0.5).values * 1e-15
-    delCT = cache[f'delCT_{label}'].sel({f'time_{label}': year}, method='nearest', tolerance=0.5).values * 1e-15
-    delxCO2 = cache[f'delxCO2_{label}'].sel({f'time_{label}': year}, method='nearest', tolerance=0.5).values
-    if scenario == 'none': xCO2 = delxCO2 + get_co2_scenario(scenario, [start_year])
-    else: xCO2 = delxCO2 + get_co2_scenario(scenario, [year])
-    if scenario == 'none': relative_delxCO2 = np.nan 
-    else: relative_delxCO2 = np.abs(delxCO2) / (get_co2_scenario(scenario, [year]) - get_co2_scenario(scenario, [start_CDR])) * 100
+    AT_added = cache[f'AT_added_cum_{label}'].sel({f'time_{label}': end_year}, method='nearest', tolerance=0.5).values * 1e-15
+    delAT = cache[f'delAT_{label}'].sel({f'time_{label}': end_year}, method='nearest', tolerance=0.5).values * 1e-15
+    delCT = cache[f'delCT_{label}'].sel({f'time_{label}': end_year}, method='nearest', tolerance=0.5).values * 1e-15
+    delxCO2 = cache[f'delxCO2_{label}'].sel({f'time_{label}': end_year}, method='nearest', tolerance=0.5).values
+    if scenario == 'none': xCO2 = delxCO2 + get_co2_scenario(scenario, [plot_start])
+    else: xCO2 = delxCO2 + get_co2_scenario(scenario, [end_year])
+    if scenario == 'none': relative_delxCO2 = np.nan
+    else: relative_delxCO2 = np.abs(delxCO2) / (get_co2_scenario(scenario, [end_year]) - get_co2_scenario(scenario, [start_simulation])) * 100
     eta = delCT/delAT * 100
     _vars = [AT_added, delCT, delxCO2, xCO2, relative_delxCO2, eta]
     for _var in _vars:
@@ -509,5 +517,55 @@ avg_subsurf_pH_preind = np.average(flatten(pH_preind_3d, ocnmask & ~mldmask), we
 print(f'subsurface pH in 2100 (SSP2-4.5 w/max OAE):\t{avg_subsurf_pH_2100_OAE:.2f}')
 print(f'subsurface preindustrial pH:\t{avg_subsurf_pH_preind:.2f}')
 print(f'preindustrial - 2100:\t{(avg_subsurf_pH_preind - avg_subsurf_pH_2100_OAE):.2f}')
+
+# %% statistics: climate relevance
+
+# atmospheric CO2 decline by 2100 from simulation start (2030)
+start_CDR = 2030
+_tbl2_vars = ['delxCO2_OAE (ppm)', 'xCO2_2100-xCO2_2030 (ppm)']
+_lw2  = 16
+_vw2  = 24
+_sep2 = '=' * (_lw2 + _vw2 * len(_tbl2_vars))
+
+print('Atmospheric CO2 Changes by 2100')
+print(_sep2)
+print(f"{'':>{_lw2}}" + ''.join(f"{h:>{_vw2}}" for h in _tbl2_vars))
+
+for label, scenario in zip(labels, scenarios):
+    delxCO2_2100 = cache[f'delxCO2_{label}'].sel({f'time_{label}': 2100}, method='nearest', tolerance=0.5).values
+    xCO2_2100    = delxCO2_2100 + get_co2_scenario(scenario, [2100])
+    xCO2_2030    = get_co2_scenario(scenario, [start_CDR])
+    total_change = xCO2_2100 - xCO2_2030
+    print(f"{label:<{_lw2}}{float(delxCO2_2100):>{_vw2}.2f}{float(total_change):>{_vw2}.2f}")
+print(_sep2)
+
+# atmospheric CO2 levels at 2100 with max OAE
+print('Atmospheric CO2 at 2100 with max OAE')
+for label, scenario in zip(labels[1:], scenarios[1:]):
+    delxCO2_2100 = cache[f'delxCO2_{label}'].sel({f'time_{label}': 2100}, method='nearest', tolerance=0.5).values
+    xCO2_2100    = delxCO2_2100 + get_co2_scenario(scenario, [2100])
+    print(f'  {label}:\t{float(xCO2_2100):.2f} ppm')
+
+# additional C accumulated in ocean by preindustrial pH target for ssp2-4.5
+if recovery_year is not None:
+    delCT_recovery = cache['delCT_SSP2-4.5'].sel({'time_SSP2-4.5': recovery_year}, method='nearest', tolerance=0.5).values
+    print(f'delCT at pH recovery year ({recovery_year:.0f}, SSP2-4.5):\t{delCT_recovery * 1e-15:.2f} Pmol\t{delCT_recovery * 12.011 * 1e-15:.2f} PgC')
+else:
+    print('No pH recovery year — skipping delCT at recovery')
+
+# additional C accumulated in ocean by 2100 for ssp2-4.5
+delCT_2100 = cache['delCT_SSP2-4.5'].sel({'time_SSP2-4.5': 2100}, method='nearest', tolerance=0.5).values
+print(f'delCT at 2100 (SSP2-4.5):\t{delCT_2100 * 1e-15:.2f} Pmol\t{delCT_2100 * 12.011 * 1e-15:.2f} PgC')
+
+# amount of AT required to reach preindustrial pH for ssp2-4.5
+if recovery_year is not None:
+    delAT_recovery = cache['delAT_SSP2-4.5'].sel({'time_SSP2-4.5': recovery_year}, method='nearest', tolerance=0.5).values
+    print(f'delAT at pH recovery year ({recovery_year:.0f}, SSP2-4.5):\t{delAT_recovery * 1e-15:.2f} Pmol\t{delAT_recovery * 12.011 * 1e-15:.2f} PgC')
+else:
+    print('No pH recovery year — skipping delAT at recovery')
+
+# amount of CT accumulated as of 2022 (using TRACE)
+Canth_2022 = calculate_canth('none', 2022, temperature_3d, salinity_3d, ocnmask, latitude, longitude, depth) * cell_volume * rho * 1e-6 # mol 
+print(f'Canth accumulated as of 2022:\t{np.nansum(Canth_2022) * 1e-15:.2e} Pmol\t{np.nansum(Canth_2022) * 1e-15 * 12.011:.2e} PgC')
 
 #%%

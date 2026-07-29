@@ -22,6 +22,7 @@ CLI usage:
     python -m experiments.impulse_response --list
     python -m experiments.impulse_response --test --list
     python -m experiments.impulse_response --test --exp-id 0-19
+    python -m experiments.impulse_response --exp-id 0-100 --resume --date 2026-07-24
 """
 
 import numpy as np
@@ -68,7 +69,7 @@ class ImpulseResponse(BaseExperiment):
         return q
 
 
-def build_experiments(data_path: str, output_path: str, test: bool = False) -> list:
+def build_experiments(data_path: str, output_path: str, test: bool = False, tag_date: str = None) -> list:
     """Return a list of ImpulseResponse instances.
 
     In test mode: 5 timestep resolutions × 4 representative cells, 5-year runs
@@ -85,7 +86,8 @@ def build_experiments(data_path: str, output_path: str, test: bool = False) -> l
     surf_mask[:, :, 1:] = 0
     ocn_idxs = np.argwhere(surf_mask == 1)  # shape (n_surface_cells, 3)
 
-    tag_date    = datetime.now().strftime('%Y-%m-%d')
+    if tag_date is None:
+        tag_date = datetime.now().strftime('%Y-%m-%d')
     experiments = []
 
     if test:
