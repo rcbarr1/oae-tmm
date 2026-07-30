@@ -10,6 +10,7 @@ Reference: Zhou et al. (2025), Nature Climate Change, 15, 59–65.
 @author: Reese C. Barrett
 """
 #%%
+import argparse
 import glob
 import os
 
@@ -48,6 +49,13 @@ scenarios = ['none', 'ssp245', 'ssp534_OS']
 YEAR_5YR  = 2027   # 5 years after CDR start (2022)
 YEAR_15YR = 2037   # 15 years after CDR start
 YEAR_50YR = 2072   # 50 years after CDR start
+
+_parser = argparse.ArgumentParser()
+_parser.add_argument('--scenario', default=None, choices=scenarios,
+                     help='compute only this scenario\'s .npy intermediates and exit '
+                          '(none, ssp245, ssp534_OS); omit to run all scenarios and generate figure')
+_args, _ = _parser.parse_known_args()
+_scenario_filter = _args.scenario
 
 
 #%% validity check
@@ -158,6 +166,13 @@ def _load_or_compute_scenario(scenario):
 eta_cache = _load_final_cache()
 
 if eta_cache is None:
+    if _scenario_filter is not None:
+        # Single-scenario mode: compute .npy intermediates for one scenario and exit.
+        # Re-run without --scenario once all scenarios are done to assemble the
+        # final cache and generate the figure.
+        _load_or_compute_scenario(_scenario_filter)
+        import sys; sys.exit(0)
+
     eta_cache = {}
     for scenario in scenarios:
         eta_5, eta_15, eta_50 = _load_or_compute_scenario(scenario)
