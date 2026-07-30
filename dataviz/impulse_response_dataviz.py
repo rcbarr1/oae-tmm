@@ -67,7 +67,7 @@ def is_valid(ds):
     final delCT field contains no NaN, which would indicate a truncated or
     solver-failed run.
     """
-    if float(ds.time.values[-1]) != YEAR_15YR:
+    if float(ds.time.values[-1]) < YEAR_50YR - 0.5:
         return False
     if not np.any(np.isfinite(ds['delCT'].isel(time=-1).values)):
         return False
@@ -191,19 +191,19 @@ if eta_cache is None:
 #%% figure: 2×3 global efficiency map
 
 _scenario_labels = {
-    'none':      'No SSP',
+    'none':      'Fixed Atm. CO$_{2}$',
     'ssp245':    'SSP2-4.5',
     'ssp534_OS': 'SSP5-3.4 OS',
 }
-_row_labels = [r'$\eta$ at 5 years', r'$\eta$ at 15 years']
-_horizons   = [('5yr', YEAR_5YR), ('15yr', YEAR_15YR)]
-_panel_ids  = ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)']
+_row_labels = [r'$\eta$ at 5 years', r'$\eta$ at 15 years', r'$\eta$ at 50 years']
+_horizons   = [('5yr', YEAR_5YR), ('15yr', YEAR_15YR), ('50yr', YEAR_50YR)]
+_panel_ids  = ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)', '(g)', '(h)', '(i)']
 
 data_crs = ccrs.PlateCarree()
 map_proj = ccrs.EqualEarth(central_longitude=200)
 
 fig, axes = plt.subplots(
-    2, 3,
+    3, 3,
     figsize=(12, 4.5),
     dpi=200,
     subplot_kw={'projection': map_proj},
@@ -293,12 +293,12 @@ print(f"eta at (41.5 ºN, 201 ºE): {data[66, 100] * 100:.2f}%")
 distance = geodesic((latitude[70], longitude[100]), (latitude[66], longitude[100])).km
 print(f'distance between these coords: {distance:.2f} (km)')
 
-# total anthropogenic C added to ocean (Pmol)
+# total anthropogenic C added to ocean (PgC)
 _lw  = 6
 _vw  = 12
 _sep = '=' * (_lw + _vw * len(_tbl_vars))
 
-print('Anthropogenic Carbon Statistics (Pmol accumulated)')
+print('Anthropogenic Carbon Statistics (PgC accumulated)')
 print(_sep)
 print(f"{'':>{_lw}}" + ''.join(f"{s:>{_vw}}" for s in scenarios))
 
@@ -309,7 +309,7 @@ for horizon, year in _horizons:
             _Canth = 0
         else:
             data  = interp_trace(data_path, year, scenario, latitude, longitude, depth, ocnmask) - interp_trace(data_path, 2022, scenario, latitude, longitude, depth, ocnmask)
-            _Canth = np.nansum(data * rho * cell_volume * 1e-6) * 1e-15 # Pmol
+            _Canth = np.nansum(data * rho * cell_volume * 1e-6) * 1e-15 * 12.011 # PgC
         _row += f"{float(_Canth):>{_vw - 1}.2f}"
     print(_row)
 print(_sep)

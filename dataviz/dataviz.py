@@ -37,7 +37,7 @@ def get_co2_scenario(scenario, time):
             f"Invalid scenario {scenario!r}. Must be one of: {', '.join(scenarios.keys())}"
         )
 
-    data_file = './pyTRACE/pyTRACE/data/CO2TrajectoriesAdjusted.txt'
+    data_file = './pyTRACE/pyTRACE/data/CO2Trajectories.txt'
     data = np.loadtxt(data_file)
     co2_years = data[:, 0]
     co2_values = data[:, scenarios[scenario]]

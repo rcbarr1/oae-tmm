@@ -22,7 +22,7 @@ from tqdm.auto import tqdm
 from tqdm.dask import TqdmCallback
 
 data_path   = './data/'
-max_AT_path = '/Volumes/LaCie/outputs/max_AT/'
+max_AT_path = './outputs/'
 ir_path     = './outputs/'   # impulse_response --test output; change if run elsewhere
 
 # Set to the tag dates used when the experiments were run
@@ -113,7 +113,7 @@ else:
 _panel_vars = [
     ('AT_added_cum', r'Cumulative ${A_{\mathrm{T}}}^{\prime}$ added (Pmol)', 1e-15),
     ('delxCO2',      r'CO$_2$ drawdown (ppm)',                               1.0),
-    ('delCT',        r"${C_{\mathrm{T}}}^{\prime}$ (Pmol)",                 1e-15),
+    ('delCT',        r"${C_{\mathrm{T}}}^{\prime}$ (PgC)",                  1e-15 * 12.011),
     ('delAT',        r"${A_{\mathrm{T}}}^{\prime}$ (Pmol)",                 1e-15),
 ]
 # (lbl, x, ha): (b) floated right to avoid line overlap, rest top-left
@@ -272,7 +272,7 @@ else:
 _ir_row_vars = [
     ('AT_added_cum', r'Cumulative ${A_{\mathrm{T}}}^{\prime}$ added (Pmol)', 1e-15),
     ('delxCO2',      r'CO$_2$ drawdown (ppm)',                               1.0),
-    ('delCT',        r"${C_{\mathrm{T}}}^{\prime}$ (Pmol)",                 1e-15),
+    ('delCT',        r"${C_{\mathrm{T}}}^{\prime}$ (PgC)",                  1e-15 * 12.011),
     ('delAT',        r"${A_{\mathrm{T}}}^{\prime}$ (Pmol)",                 1e-15),
 ]
 _n_rows = len(_ir_row_vars)
@@ -316,6 +316,8 @@ for row, (var_key, row_ylabel, scale) in enumerate(_ir_row_vars):
         else:
             ax.set_xticklabels([])
         ax.xaxis.set_major_locator(MultipleLocator(1))
+        if var_key == 'delCT' and col == 0:
+            ax.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
         for side in ('top', 'bottom', 'left', 'right'):
             ax.spines[side].set_color(textcolor)
 
