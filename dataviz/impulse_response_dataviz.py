@@ -25,6 +25,7 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from tqdm.auto import tqdm
 from geopy.distance import geodesic
+from scipy.stats import pearsonr
 
 data_path = './data/'
 # ir_path   = '/Volumes/LaCie/outputs/impulse_response/'
@@ -210,7 +211,7 @@ fig, axes = plt.subplots(
 )
 fig.subplots_adjust(hspace=0.08, wspace=0.04, top=0.88, bottom=0.12, left=0.06, right=0.88)
 
-_vmin, _vmax = 0.0, 1.0
+_vmin, _vmax = 0, 100
 im = None
 
 for row, (horizon, _) in enumerate(_horizons):
@@ -222,7 +223,7 @@ for row, (horizon, _) in enumerate(_horizons):
         ax.set_global()
 
         im = ax.pcolormesh(
-            longitude, latitude, data,
+            longitude, latitude, data * 100, # as a percentage
             cmap='viridis', vmin=_vmin, vmax=_vmax,
             transform=data_crs, zorder=1,
         )
@@ -248,7 +249,7 @@ for row, (horizon, _) in enumerate(_horizons):
 
 cbar_ax = fig.add_axes([0.90, 0.15, 0.015, 0.70])
 cbar    = fig.colorbar(im, cax=cbar_ax)
-cbar.set_label(r'$\eta$ (mol ${C_{\mathrm{T}}}^{\prime}$ / mol ${A_{\mathrm{T}}}^{\prime}$)', fontsize=_fs, fontweight=fontweight)
+cbar.set_label(r'$\eta$ (%, mol ${C_{\mathrm{T}}}^{\prime}$ / mol ${A_{\mathrm{T}}}^{\prime}$)', fontsize=_fs, fontweight=fontweight)
 cbar.set_ticks(np.linspace(_vmin, _vmax, 6))
 cbar.ax.yaxis.label.set_color(textcolor)
 cbar.ax.tick_params(colors=textcolor, labelsize=_fs)
@@ -256,6 +257,24 @@ cbar.ax.tick_params(colors=textcolor, labelsize=_fs)
 plt.show()
 
 #%%  statistics
+# spatial correlation coefficient
+_lw_corr  = 32
+_vw_corr  = 10
+_sep_corr = '=' * (_lw_corr + _vw_corr)
+
+print('Pairwise Spatial Correlation (Pearson r) Between Scenarios')
+print(_sep_corr)
+print(f"{'Pair':>{_lw_corr}}{'r':>{_vw_corr}}")
+for horizon, _ in _horizons:
+    for i, s1 in enumerate(scenarios):
+        for s2 in scenarios[i + 1:]:
+            d1   = flatten(eta_cache[f'eta_{horizon}_{s1}'], ocnmask[:, :, 0])
+            d2   = flatten(eta_cache[f'eta_{horizon}_{s2}'], ocnmask[:, :, 0])
+            mask = np.isfinite(d1) & np.isfinite(d2)
+            r_val, _ = pearsonr(d1[mask], d2[mask])
+            label = f'{horizon}: {s1} vs {s2}'
+            print(f"{label:>{_lw_corr}}{r_val:>{_vw_corr - 1}.6f}")
+print(_sep_corr)
 
 # ice-free efficiency range, average, and standard deviation
 _tbl_vars = ['Mean', 'Std. Dev', 'Min', 'Max']
@@ -265,7 +284,7 @@ _sep = '=' * (_lw + _vw * len(_tbl_vars))
 
 f_ice = xr.open_dataset(data_path + 'ncep_doe_reanalysis_ii/icec.nc')['icec'].transpose('latitude', 'longitude').values
 icemask = flatten((f_ice <= 0.05).astype(int), ocnmask[:, :, 0])
-weights = flatten(cell_volume[:, :, 0], ocnmask[:, :, 0])
+weights = flatten(cell_volume[:, :, 0], ocnmask[:, :, 0]) * 0 + 1
 
 print('Ice-Free OAE Efficiency Statistics (eta, %)')
 print(_sep)

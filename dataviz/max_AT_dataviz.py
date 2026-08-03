@@ -18,6 +18,7 @@ import os
 import PyCO2SYS as pyco2
 from tqdm.auto import tqdm
 from tqdm.dask import TqdmCallback
+from gsw import SA_from_SP, pt0_from_t
 
 # load model architecture
 data_path = './data/'
@@ -41,10 +42,10 @@ start_simulation = 2030   # simulation start year
 end_year         = 2100   # simulation end year
 
 #%% pull timestepping comparison experiments (generated with --test --exp-id 0-6)
-experiment_names = ['max_AT_2026-07-24_long_none',
-                    'max_AT_2026-07-24_long_ssp126',
-                    'max_AT_2026-07-24_long_ssp245',
-                    'max_AT_2026-07-24_long_ssp534']
+experiment_names = ['max_AT_2026-07-30_long_none',
+                    'max_AT_2026-07-30_long_ssp126',
+                    'max_AT_2026-07-30_long_ssp245',
+                    'max_AT_2026-07-30_long_ssp534']
 
 labels = ['None', 'SSP1-2.6', 'SSP2-4.5', 'SSP5-3.4 OS']
 legend_labels = ['Fixed Atm. CO₂', 'SSP1-2.6', 'SSP2-4.5', 'SSP5-3.4 OS']
@@ -257,7 +258,13 @@ phosphate   = flatten(phosphate_3d,   ocnmask)
 
 # create "pressure" array by broadcasting depth array
 pressure_3d = np.tile(depth[:, np.newaxis, np.newaxis], (1, ocnmask.shape[0], ocnmask.shape[1])).transpose([1, 2, 0])
-pressure    = flatten(pressure_3d, ocnmask)
+pressure      = flatten(pressure_3d, ocnmask)
+latitude_flat  = flatten(np.broadcast_to(latitude[:, np.newaxis, np.newaxis],  ocnmask.shape), ocnmask)
+longitude_flat = flatten(np.broadcast_to(longitude[np.newaxis, :, np.newaxis], ocnmask.shape), ocnmask)
+
+# make surface temperature array for calculation of pCO2
+abs_salinity = SA_from_SP(salinity, pressure, longitude_flat, latitude_flat)
+potential_temperature = pt0_from_t(abs_salinity, temperature, pressure) 
 
 #%% calculate pH (no OAE) on OCIM grid in 2050 and 2100 using SSP2-4.5
 
@@ -273,28 +280,36 @@ CT_2050_3d = CT_preind_3d + Canth_2050_3d
 CT_2100_3d = CT_preind_3d + Canth_2100_3d
 
 # calculate pH assuming steady state alkalinity
-co2sys_2050 = pyco2.sys(dic=flatten(CT_2050_3d, ocnmask),
-                        alkalinity=flatten(AT_3d, ocnmask),
-                        salinity=salinity, temperature=temperature, pressure=pressure,
-                        total_silicate=silicate, total_phosphate=phosphate)
+co2sys_2050         = pyco2.sys(dic=flatten(CT_2050_3d, ocnmask),
+                                alkalinity=flatten(AT_3d, ocnmask),
+                                salinity=salinity, temperature=temperature, pressure=pressure,
+                                total_silicate=silicate, total_phosphate=phosphate)
+co2sys_2050_surf    = pyco2.sys(dic=flatten(CT_2050_3d, ocnmask),
+                                alkalinity=flatten(AT_3d, ocnmask),
+                                salinity=salinity, temperature=potential_temperature, pressure=0,
+                                total_silicate=silicate, total_phosphate=phosphate)
 pH_2050     = co2sys_2050['pH']
 RC_2050     = co2sys_2050['revelle_factor']
 omegaA_2050 = co2sys_2050['saturation_aragonite']
-pCO2_2050   = co2sys_2050['pCO2']
+pCO2_2050   = co2sys_2050_surf['pCO2']
 
 pH_2050_3d     = make_3d(pH_2050, ocnmask)
 RC_2050_3d     = make_3d(RC_2050, ocnmask)
 omegaA_2050_3d = make_3d(omegaA_2050, ocnmask)
 pCO2_2050_3d   = make_3d(pCO2_2050, ocnmask)
 
-co2sys_2100 = pyco2.sys(dic=flatten(CT_2100_3d, ocnmask),
-                        alkalinity=flatten(AT_3d, ocnmask),
-                        salinity=salinity, temperature=temperature, pressure=pressure,
-                        total_silicate=silicate, total_phosphate=phosphate)
+co2sys_2100         = pyco2.sys(dic=flatten(CT_2100_3d, ocnmask),
+                                alkalinity=flatten(AT_3d, ocnmask),
+                                salinity=salinity, temperature=temperature, pressure=pressure,
+                                total_silicate=silicate, total_phosphate=phosphate)
+co2sys_2100_surf    = pyco2.sys(dic=flatten(CT_2100_3d, ocnmask),
+                                alkalinity=flatten(AT_3d, ocnmask),
+                                salinity=salinity, temperature=potential_temperature, pressure=0,
+                                total_silicate=silicate, total_phosphate=phosphate)
 pH_2100     = co2sys_2100['pH']
 RC_2100     = co2sys_2100['revelle_factor']
 omegaA_2100 = co2sys_2100['saturation_aragonite']
-pCO2_2100   = co2sys_2100['pCO2']
+pCO2_2100   = co2sys_2100_surf['pCO2']
 
 pH_2100_3d     = make_3d(pH_2100, ocnmask)
 RC_2100_3d     = make_3d(RC_2100, ocnmask)
@@ -316,28 +331,36 @@ with xr.open_mfdataset(
     AT_OAE_2100_3d = AT_3d + ds['delAT'].sel(time=2100, method='nearest', tolerance=0.5).values
 
 # calculate pH assuming steady state alkalinity
-co2sys_OAE_2050 = pyco2.sys(dic=flatten(CT_OAE_2050_3d, ocnmask),
-                            alkalinity=flatten(AT_OAE_2050_3d, ocnmask),
-                            salinity=salinity, temperature=temperature, pressure=pressure,
-                            total_silicate=silicate, total_phosphate=phosphate)
+co2sys_OAE_2050         = pyco2.sys(dic=flatten(CT_OAE_2050_3d, ocnmask),
+                                    alkalinity=flatten(AT_OAE_2050_3d, ocnmask),
+                                    salinity=salinity, temperature=temperature, pressure=pressure,
+                                    total_silicate=silicate, total_phosphate=phosphate)
+co2sys_OAE_2050_surf    = pyco2.sys(dic=flatten(CT_OAE_2050_3d, ocnmask),
+                                    alkalinity=flatten(AT_OAE_2050_3d, ocnmask),
+                                    salinity=salinity, temperature=potential_temperature, pressure=0,
+                                    total_silicate=silicate, total_phosphate=phosphate)
 pH_OAE_2050       = co2sys_OAE_2050['pH']
 RC_OAE_2050       = co2sys_OAE_2050['revelle_factor']
 omegaA_OAE_2050   = co2sys_OAE_2050['saturation_aragonite']
-pCO2_OAE_2050     = co2sys_OAE_2050['pCO2']
+pCO2_OAE_2050     = co2sys_OAE_2050_surf['pCO2']
 
 pH_OAE_2050_3d     = make_3d(pH_OAE_2050, ocnmask)
 RC_OAE_2050_3d     = make_3d(RC_OAE_2050, ocnmask)
 omegaA_OAE_2050_3d = make_3d(omegaA_OAE_2050, ocnmask)
 pCO2_OAE_2050_3d   = make_3d(pCO2_OAE_2050, ocnmask)
 
-co2sys_OAE_2100 = pyco2.sys(dic=flatten(CT_OAE_2100_3d, ocnmask),
-                            alkalinity=flatten(AT_OAE_2100_3d, ocnmask),
-                            salinity=salinity, temperature=temperature, pressure=pressure,
-                            total_silicate=silicate, total_phosphate=phosphate)
+co2sys_OAE_2100         = pyco2.sys(dic=flatten(CT_OAE_2100_3d, ocnmask),
+                                    alkalinity=flatten(AT_OAE_2100_3d, ocnmask),
+                                    salinity=salinity, temperature=temperature, pressure=pressure,
+                                    total_silicate=silicate, total_phosphate=phosphate)
+co2sys_OAE_2100_surf    = pyco2.sys(dic=flatten(CT_OAE_2100_3d, ocnmask),
+                                    alkalinity=flatten(AT_OAE_2100_3d, ocnmask),
+                                    salinity=salinity, temperature=potential_temperature, pressure=0,
+                                    total_silicate=silicate, total_phosphate=phosphate)
 pH_OAE_2100       = co2sys_OAE_2100['pH']
 RC_OAE_2100       = co2sys_OAE_2100['revelle_factor']
 omegaA_OAE_2100   = co2sys_OAE_2100['saturation_aragonite']
-pCO2_OAE_2100     = co2sys_OAE_2100['pCO2']
+pCO2_OAE_2100     = co2sys_OAE_2100_surf['pCO2']
 
 pH_OAE_2100_3d     = make_3d(pH_OAE_2100, ocnmask)
 RC_OAE_2100_3d     = make_3d(RC_OAE_2100, ocnmask)
@@ -368,7 +391,7 @@ map_proj = ccrs.EqualEarth(central_longitude=200)
 # surface maps of change in pH, Revelle factor, Ω_A (3 rows × 2 cols)
 surface_vars = [
     (r'$\mathrm{pH}$', del_pH_2050_3d[:, :, 0],     del_pH_2100_3d[:, :, 0]),
-    (r'$\mathrm{R_C}$',       del_RC_2050_3d[:, :, 0],     del_RC_2100_3d[:, :, 0]),
+    (r'$R_C$',       del_RC_2050_3d[:, :, 0],     del_RC_2100_3d[:, :, 0]),
     (r'${\Omega_A}$',  del_omegaA_2050_3d[:, :, 0], del_omegaA_2100_3d[:, :, 0]),
 ]
 
@@ -447,7 +470,7 @@ plt.tight_layout()
 fig2.subplots_adjust(right=0.87)
 cbar_ax = fig2.add_axes([0.89, 0.1, 0.015, 0.8])
 cbar2   = fig2.colorbar(im, cax=cbar_ax)
-cbar2.set_label(r'Change in $\mathrm{pCO_2}$ (µatm)', fontsize=_fs)
+cbar2.set_label(r'Change in $p_{\mathrm{CO_2}}$ (µatm)', fontsize=_fs)
 cbar2.ax.yaxis.label.set_color(textcolor)
 cbar2.ax.tick_params(colors=textcolor, labelsize=_fs)
 
@@ -469,7 +492,7 @@ print(f'Maximum change in subsurface ocean pCO2 (2100):\t{np.nanmin(del_pCO2_210
 # sample location in North Pacific (53 ºN, 151 ºW)
 depth_idx = 12
 print(f'Surface change in pCO2 at 53ºN, 151ºW (2100):\t{del_pCO2_2100_3d[72, 104, 0]:.2f}')
-print(f'{depth[depth_idx]:.0f} m change in pCO2 at 53ºN, 151ºW (2100):\t{del_pCO2_2100_3d[72, 104, depth_idx]:.2f}')
+print(f'{(depth[depth_idx] - depth[0]):.0f} m change in pCO2 at 53ºN, 151ºW (2100):\t{del_pCO2_2100_3d[72, 104, depth_idx]:.2f}')
 print(f'Depth difference (m):\t\t\t\t{depth[depth_idx] - depth[0]:.2f}')
 
 #%% statistics: subsurface ocean pH changes
@@ -499,23 +522,20 @@ AT_mld          = flatten(AT_3d,          mldmask)
 with xr.open_mfdataset(
         output_path + experiment_names[2] + '_*.nc',
         combine='by_coords',
-        chunks={'time': 10},
+        chunks={'time': 1},
         parallel=True) as ds:
     time_surf_pH = ds['time'].values
-    with TqdmCallback(desc='Loading delCT/delAT for surface pH'):
-        ds_surf = ds[['delCT', 'delAT']].compute()
-delCT_ts = ds_surf['delCT'].values
-delAT_ts = ds_surf['delAT'].values
-
-avg_surf_pH_OAE_ts = np.full(len(time_surf_pH), np.nan)
-for i, t in enumerate(tqdm(time_surf_pH, desc='Computing surface pH time series')):
-    Canth_t  = interp_trace(data_path, t, 'ssp245', latitude, longitude, depth, ocnmask)
-    CT_t_mld = CT_preind_mld + flatten(Canth_t, mldmask) + flatten(delCT_ts[i], mldmask)
-    AT_t_mld = AT_mld + flatten(delAT_ts[i], mldmask)
-    co2sys_t = pyco2.sys(dic=CT_t_mld, alkalinity=AT_t_mld,
-                         salinity=salinity_mld, temperature=temperature_mld, pressure=pressure_mld,
-                         total_silicate=silicate_mld, total_phosphate=phosphate_mld)
-    avg_surf_pH_OAE_ts[i] = np.average(co2sys_t['pH'], weights=weights_mld)
+    avg_surf_pH_OAE_ts = np.full(len(time_surf_pH), np.nan)
+    for i, t in enumerate(tqdm(time_surf_pH, desc='Computing surface pH time series')):
+        delCT_t  = ds['delCT'].isel(time=i).values
+        delAT_t  = ds['delAT'].isel(time=i).values
+        Canth_t  = interp_trace(data_path, t, 'ssp245', latitude, longitude, depth, ocnmask)
+        CT_t_mld = CT_preind_mld + flatten(Canth_t, mldmask) + flatten(delCT_t, mldmask)
+        AT_t_mld = AT_mld + flatten(delAT_t, mldmask)
+        co2sys_t = pyco2.sys(dic=CT_t_mld, alkalinity=AT_t_mld,
+                             salinity=salinity_mld, temperature=temperature_mld, pressure=pressure_mld,
+                             total_silicate=silicate_mld, total_phosphate=phosphate_mld)
+        avg_surf_pH_OAE_ts[i] = np.average(co2sys_t['pH'], weights=weights_mld)
 
 within_5pct  = np.abs(avg_surf_pH_OAE_ts - avg_surf_pH_preind) / avg_surf_pH_preind < 0.05
 crossing_idx = np.where(within_5pct)[0]
