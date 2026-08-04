@@ -519,23 +519,35 @@ weights_mld     = flatten(cell_volume,    mldmask)
 CT_preind_mld   = flatten(CT_preind_3d,   mldmask)
 AT_mld          = flatten(AT_3d,          mldmask)
 
-with xr.open_mfdataset(
-        output_path + experiment_names[2] + '_*.nc',
-        combine='by_coords',
-        chunks={'time': 1},
-        parallel=True) as ds:
-    time_surf_pH = ds['time'].values
-    avg_surf_pH_OAE_ts = np.full(len(time_surf_pH), np.nan)
-    for i, t in enumerate(tqdm(time_surf_pH, desc='Computing surface pH time series')):
-        delCT_t  = ds['delCT'].isel(time=i).values
-        delAT_t  = ds['delAT'].isel(time=i).values
-        Canth_t  = interp_trace(data_path, t, 'ssp245', latitude, longitude, depth, ocnmask)
-        CT_t_mld = CT_preind_mld + flatten(Canth_t, mldmask) + flatten(delCT_t, mldmask)
-        AT_t_mld = AT_mld + flatten(delAT_t, mldmask)
-        co2sys_t = pyco2.sys(dic=CT_t_mld, alkalinity=AT_t_mld,
-                             salinity=salinity_mld, temperature=temperature_mld, pressure=pressure_mld,
-                             total_silicate=silicate_mld, total_phosphate=phosphate_mld)
-        avg_surf_pH_OAE_ts[i] = np.average(co2sys_t['pH'], weights=weights_mld)
+surf_pH_cache_path = output_path + 'max_AT_surf_pH_cache.nc'
+
+if os.path.exists(surf_pH_cache_path):
+    _surf_pH_cache = xr.open_dataset(surf_pH_cache_path).load()
+    time_surf_pH = _surf_pH_cache['time'].values
+    avg_surf_pH_OAE_ts = _surf_pH_cache['avg_surf_pH_OAE'].values
+    if float(time_surf_pH[-1]) < _expected_end - 0.01:
+        os.remove(surf_pH_cache_path)
+        raise RuntimeError('Surface pH cache is stale — delete it and rerun to recompute.')
+else:
+    with xr.open_mfdataset(
+            output_path + experiment_names[2] + '_*.nc',
+            combine='by_coords',
+            chunks={'time': 1},
+            parallel=True) as ds:
+        time_surf_pH = ds['time'].values
+        avg_surf_pH_OAE_ts = np.full(len(time_surf_pH), np.nan)
+        for i, t in enumerate(tqdm(time_surf_pH, desc='Computing surface pH time series')):
+            delCT_t  = ds['delCT'].isel(time=i).values
+            delAT_t  = ds['delAT'].isel(time=i).values
+            Canth_t  = interp_trace(data_path, t, 'ssp245', latitude, longitude, depth, ocnmask)
+            CT_t_mld = CT_preind_mld + flatten(Canth_t, mldmask) + flatten(delCT_t, mldmask)
+            AT_t_mld = AT_mld + flatten(delAT_t, mldmask)
+            co2sys_t = pyco2.sys(dic=CT_t_mld, alkalinity=AT_t_mld,
+                                 salinity=salinity_mld, temperature=temperature_mld, pressure=pressure_mld,
+                                 total_silicate=silicate_mld, total_phosphate=phosphate_mld)
+            avg_surf_pH_OAE_ts[i] = np.average(co2sys_t['pH'], weights=weights_mld)
+    xr.Dataset({'avg_surf_pH_OAE': ('time', avg_surf_pH_OAE_ts)},
+               coords={'time': time_surf_pH}).to_netcdf(surf_pH_cache_path)
 
 within_5pct  = np.abs(avg_surf_pH_OAE_ts - avg_surf_pH_preind) / avg_surf_pH_preind < 0.05
 crossing_idx = np.where(within_5pct)[0]
@@ -561,8 +573,8 @@ for side in ('top', 'bottom', 'left', 'right'):
 plt.tight_layout()
 
 # calculate
-avg_subsurf_pH_2100_OAE = np.average(flatten(pH_OAE_2100_3d, ocnmask & ~mldmask), weights=flatten(cell_volume, ocnmask & ~mldmask))
-avg_subsurf_pH_preind = np.average(flatten(pH_preind_3d, ocnmask & ~mldmask), weights=flatten(cell_volume, ocnmask & ~mldmask))
+avg_subsurf_pH_2100_OAE = np.average(flatten(pH_OAE_2100_3d, ocnmask.astype(bool) & ~mldmask.astype(bool)), weights=flatten(cell_volume, ocnmask.astype(bool) & ~mldmask.astype(bool)))
+avg_subsurf_pH_preind = np.average(flatten(pH_preind_3d, ocnmask.astype(bool) & ~mldmask.astype(bool)), weights=flatten(cell_volume, ocnmask.astype(bool) & ~mldmask.astype(bool)))
 print(f'subsurface pH in 2100 (SSP2-4.5 w/max OAE):\t{avg_subsurf_pH_2100_OAE:.2f}')
 print(f'subsurface preindustrial pH:\t{avg_subsurf_pH_preind:.2f}')
 print(f'preindustrial - 2100:\t{(avg_subsurf_pH_preind - avg_subsurf_pH_2100_OAE):.2f}')
@@ -595,23 +607,9 @@ for label, scenario in zip(labels[1:], scenarios[1:]):
     xCO2_2100    = delxCO2_2100 + get_co2_scenario(scenario, [2100])
     print(f'  {label}:\t{float(xCO2_2100):.2f} ppm')
 
-# additional C accumulated in ocean by preindustrial pH target for ssp2-4.5
-if recovery_year is not None:
-    delCT_recovery = cache['delCT_SSP2-4.5'].sel({'time_SSP2-4.5': recovery_year}, method='nearest', tolerance=0.5).values
-    print(f'delCT at pH recovery year ({recovery_year:.0f}, SSP2-4.5):\t{delCT_recovery * 12.011 * 1e-15:.2f} PgC')
-else:
-    print('No pH recovery year — skipping delCT at recovery')
-
 # additional C accumulated in ocean by 2100 for ssp2-4.5
 delCT_2100 = cache['delCT_SSP2-4.5'].sel({'time_SSP2-4.5': 2100}, method='nearest', tolerance=0.5).values
 print(f'delCT at 2100 (SSP2-4.5):\t{delCT_2100 * 12.011 * 1e-15:.2f} PgC')
-
-# amount of AT required to reach preindustrial pH for ssp2-4.5
-if recovery_year is not None:
-    delAT_recovery = cache['delAT_SSP2-4.5'].sel({'time_SSP2-4.5': recovery_year}, method='nearest', tolerance=0.5).values
-    print(f'delAT at pH recovery year ({recovery_year:.0f}, SSP2-4.5):\t{delAT_recovery * 1e-15:.2f} Pmol')
-else:
-    print('No pH recovery year — skipping delAT at recovery')
 
 # amount of CT accumulated as of 2022 (using TRACE)
 Canth_2022 = calculate_canth('none', 2022, temperature_3d, salinity_3d, ocnmask, latitude, longitude, depth) * cell_volume * rho * 1e-6 # mol 
