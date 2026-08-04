@@ -17,7 +17,7 @@ from dataviz.dataviz import broadcast_to_dataset, load_ocim_grid
 data_path = './data/'
 ir_path   = './outputs/'
 ir_date   = '2026-07-24'
-scenario  = 'ssp245'
+scenario  = 'ssp534_OS'
 YEAR_5YR  = 2027
 YEAR_15YR = 2037
 YEAR_50YR = 2072

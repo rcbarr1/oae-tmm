@@ -209,7 +209,7 @@ fig, axes = plt.subplots(
     dpi=200,
     subplot_kw={'projection': map_proj},
 )
-fig.subplots_adjust(hspace=0.08, wspace=0.04, top=0.88, bottom=0.12, left=0.06, right=0.88)
+fig.subplots_adjust(hspace=0.08, wspace=-0.5, top=0.88, bottom=0.12, left=0.06, right=0.88)
 
 _vmin, _vmax = 0, 100
 im = None
@@ -231,7 +231,7 @@ for row, (horizon, _) in enumerate(_horizons):
         ax.add_feature(cfeature.LAND, facecolor='lightgray', zorder=2)
         ax.coastlines(linewidth=0.5, zorder=3)
 
-        ax.text(0.01, 0.97, panel,
+        ax.text(-0.01, 0.99, panel,
                 transform=ax.transAxes,
                 fontsize=_fs, va='top', ha='left', color=textcolor)
 
@@ -247,7 +247,7 @@ for row, (horizon, _) in enumerate(_horizons):
                     fontsize=_fs, va='center', ha='right',
                     rotation=90, color=textcolor)
 
-cbar_ax = fig.add_axes([0.90, 0.15, 0.015, 0.70])
+cbar_ax = fig.add_axes([0.79, 0.15, 0.015, 0.70])
 cbar    = fig.colorbar(im, cax=cbar_ax)
 cbar.set_label(r'$\eta$ (%, mol ${C_{\mathrm{T}}}^{\prime}$ / mol ${A_{\mathrm{T}}}^{\prime}$)', fontsize=_fs, fontweight=fontweight)
 cbar.set_ticks(np.linspace(_vmin, _vmax, 6))
@@ -291,7 +291,7 @@ print(_sep)
 print(f"{'':>{_lw}}" + ''.join(f"{h:>{_vw}}" for h in _tbl_vars))
 for horizon, _ in _horizons:
     for scenario in scenarios:
-        _row = f"{horizon}, {scenario}\t"
+        _row = f"{f'{horizon}, {scenario}':>{_lw}}"
         data  = flatten(eta_cache[f'eta_{horizon}_{scenario}'], ocnmask[:, :, 0])
         mask  = icemask.astype(bool) & np.isfinite(data)
         d, w  = data[mask], weights[mask]

@@ -75,6 +75,8 @@ def load_ocim(data_path: str) -> dict:
     associated grid variables (ocean mask, coordinates, volumes) from a
     NetCDF file.
 
+    Data source: https://doi.org/10.5281/zenodo.19944665
+
     Parameters
     ----------
     data_path : str

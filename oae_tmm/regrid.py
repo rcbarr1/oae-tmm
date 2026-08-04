@@ -7,7 +7,7 @@ scripts/generate_input_data.py, not during experiment runs. The functions
 serve as documentation of exactly how each input dataset was processed.
 
 Data sources:
-  - GLODAPv2.2016b: https://glodap.info/index.php/mapped-data-product/
+  - GLODAPv2.2016b: https://www.nodc.noaa.gov/archive/arc0107/0162565/1.1/data/0-data/mapped/
   - NCEP/DOE Reanalysis II: https://psl.noaa.gov/data/gridded/data.ncep.reanalysis2.html
   - NOAA ERSSTv5: https://psl.noaa.gov/data/gridded/data.noaa.ersst.v5.html
 """
@@ -103,7 +103,7 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, latitude: np.ndarray,
 
     Computes the annual mean from the monthly climatology, interpolates to the
     OCIM2-48L surface grid, and fills NaNs. Wind speed is averaged over
-    1994-2024; ice fraction and SST use the 1991-2020 long-term mean.
+    1994-2024; ice concentration and SST use the 1991-2020 long-term mean.
 
     Parameters
     ----------
@@ -111,7 +111,7 @@ def regrid_ncep_noaa(data_path: str, ncep_var: str, latitude: np.ndarray,
         Path to the data directory (must contain NCEP_DOE_Reanalysis_II/ and
         NOAA_Extended_Reconstruction_SST_V5/).
     ncep_var : str
-        Variable to regrid. One of: 'icec' (ice fraction), 'wspd' (wind
+        Variable to regrid. One of: 'icec' (ice concentration), 'wspd' (wind
         speed at 10 m), 'sst' (sea surface temperature).
     latitude : np.ndarray
         1D array of OCIM2-48L latitude values [degrees N].
