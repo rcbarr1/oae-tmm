@@ -213,23 +213,23 @@ for label, scenario in zip(labels, scenarios):
     delxCO2 = cache[f'delxCO2_{label}'].sel({f'time_{label}': end_year}, method='nearest', tolerance=0.5).values
     if scenario == 'none': xCO2 = delxCO2 + get_co2_scenario(scenario, [plot_start])
     else: xCO2 = delxCO2 + get_co2_scenario(scenario, [end_year])
-    _equiv_mask = (_traj_years <= 2022) if scenario == 'none' else slice(None)
+    _equiv_mask = (_traj_years <= 2022) if scenario == 'none' else (_traj_years <= 2100 if scenario == 'ssp534_OS' else slice(None))
     _equiv_co2  = _traj_data[_equiv_mask, _traj_scenario_cols[scenario]]
     _equiv_yrs  = _traj_years[_equiv_mask]
     hist_yr_equiv = np.interp(float(xCO2), _equiv_co2, _equiv_yrs)
     eta = delCT/delAT * 100
     delCT = delCT * 12.011
     _vars = [AT_added, delCT, delxCO2, xCO2, hist_yr_equiv, eta]
-    avg_delxCO2 += delxCO2
+    if scenario != 'none': avg_delxCO2 += delxCO2
     avg_eta += eta
     for _var, _fmt in zip(_vars, _fmts):
         _row += f"{float(_var):>{_vw}{_fmt}}"
     print(_row)
 print(_sep)
-avg_delxCO2 /= len(scenarios)
+avg_delxCO2 /= (len(scenarios)-1)
 avg_eta /= len(scenarios)
 
-print(f'Average decrease in atmospheric CO2 by 2100:\t{avg_delxCO2:.2f} ppm')
+print(f'Average decrease in atmospheric CO2 by 2100 (not including "none" scenario):\t{avg_delxCO2:.2f} ppm')
 print(f'Average eta by 2100:\t{avg_eta:.2f} %')
 
 # %% convert Caserini et al. (2022) limestone reserves value to mol
