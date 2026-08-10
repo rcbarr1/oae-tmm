@@ -1,7 +1,7 @@
 """
-Created on Mon Jun 22 2026
+Created on Wed Aug  6 2026
 
-DATAVIZ FOR MAX_AT: Maximum alkalinity calculation
+DATAVIZ FOR CLAMP_PH: Clamp surface pH at preindustrial
 
 @author: Reese C. Barrett
 """
@@ -21,8 +21,7 @@ from tqdm.dask import TqdmCallback
 from gsw import SA_from_SP, pt0_from_t
 
 # load model architecture
-data_path = './data/'
-#output_path = '/Volumes/LaCie/outputs/max_AT/'
+data_path   = './data/'
 output_path = './outputs/'
 
 grid        = load_ocim_grid(data_path)
@@ -41,19 +40,22 @@ plot_start       = 2020   # pre-CDR period start for plots
 start_simulation = 2030   # simulation start year
 end_year         = 2100   # simulation end year
 
-#%% pull timestepping comparison experiments (generated with --test --exp-id 0-6)
-experiment_names = ['max_AT_2026-07-30_long_none',
-                    'max_AT_2026-07-30_long_ssp126',
-                    'max_AT_2026-07-30_long_ssp245',
-                    'max_AT_2026-07-30_long_ssp534_OS']
+#%% set experiment names (generated with --exp-id 0-3)
+# Set to the tag date used when the production experiments were run
+clamp_pH_date = '2026-08-04'
 
-labels = ['None', 'SSP1-2.6', 'SSP2-4.5', 'SSP5-3.4 OS']
+experiment_names = [f'clamp_pH_{clamp_pH_date}_long_none',
+                    f'clamp_pH_{clamp_pH_date}_long_ssp126',
+                    f'clamp_pH_{clamp_pH_date}_long_ssp245',
+                    f'clamp_pH_{clamp_pH_date}_long_ssp534_OS']
+
+labels        = ['None', 'SSP1-2.6', 'SSP2-4.5', 'SSP5-3.4 OS']
 legend_labels = ['Fixed Atm. CO₂', 'SSP1-2.6', 'SSP2-4.5', 'SSP5-3.4 OS']
-scenarios = ['none', 'ssp126', 'ssp245', 'ssp534_OS']
-colors = ['#003f5c', '#83517c', '#d86c6a', '#ffa600']
+scenarios     = ['none', 'ssp126', 'ssp245', 'ssp534_OS']
+colors        = ['#003f5c', '#83517c', '#d86c6a', '#ffa600']
 
 #%% compute or load cached time series
-cache_path = output_path + 'max_AT_cache.nc'
+cache_path = output_path + 'clamp_pH_cache.nc'
 
 def _load_experiment(experiment_name, label):
     time_dim = f'time_{label}'
@@ -109,7 +111,7 @@ else:
     cache.to_netcdf(cache_path)
 
 # %% figure: four-panel full-ocean totals for paper
-# a. cumulative AT added over time
+# a. cumulative net AT added/removed over time
 # b. change in atmospheric CO2 over time & deviation from co2 scenarios
 # c. change in ocean CT content
 # d. oae efficiency over time (delCT / delAT)
@@ -178,11 +180,40 @@ axes[1][1].tick_params(labelsize=_fs)
 axes[1][1].text(0.02, 0.97, '(d)', transform=axes[1][1].transAxes,
                 fontsize=_fs, va='top', ha='left', color=textcolor)
 
+_ref_cache     = xr.open_dataset(output_path + 'max_AT_cache.nc').load()
+_ref_labels    = ['None', 'SSP1-2.6', 'SSP2-4.5', 'SSP5-3.4 OS']
+_ref_scenarios = ['none', 'ssp126', 'ssp245', 'ssp534_OS']
+
+def _ylim(data, margin=0.05):
+    lo, hi = float(np.nanmin(data)), float(np.nanmax(data))
+    span = hi - lo
+    return lo - span * margin, hi + span * margin
+
+_ref_AT  = np.concatenate([[0.0]] + [_ref_cache[f'AT_added_cum_{l}'].values * 1e-15 for l in _ref_labels])
+_ref_CT  = np.concatenate([[0.0]] + [_ref_cache[f'delCT_{l}'].values * 1e-15 * 12.011 for l in _ref_labels])
+_none_base = float(get_co2_scenario('none', [plot_start]))
+_ref_co2 = np.concatenate(
+    [np.concatenate([
+        _ref_cache[f'delxCO2_{l}'].values + get_co2_scenario(s, _ref_cache[f'delxCO2_{l}'][f'time_{l}'].values),
+        get_co2_scenario(s, np.concatenate([pre_time, _ref_cache[f'delxCO2_{l}'][f'time_{l}'].values]))
+    ]) for l, s in zip(_ref_labels, _ref_scenarios) if s != 'none'] +
+    [_ref_cache['delxCO2_None'].values + _none_base]
+)
+with np.errstate(invalid='ignore', divide='ignore'):
+    _ref_eff = np.concatenate([
+        np.where(_ref_cache[f'delAT_{l}'].values != 0,
+                 _ref_cache[f'delCT_{l}'].values / _ref_cache[f'delAT_{l}'].values * 100, np.nan)
+        for l in _ref_labels
+    ])
+
+axes[0][0].set_ylim(*_ylim(_ref_AT))
+axes[0][1].set_ylim(*_ylim(_ref_co2))
+axes[1][0].set_ylim(*_ylim(_ref_CT))
+axes[1][1].set_ylim(*_ylim(_ref_eff[~np.isnan(_ref_eff)]))
+
 plt.tight_layout()
 
 #%% statistics: ocean total changes
-
-# for each scenario, print AT added, change in CT, change in atmospheric CO2, total atmospheric CO2, % change in atmospheric CO2 w/OAE (compared to anthropogenic increase)
 
 _tbl_vars = ['AT_added (Pmol)', 'delCT (PgC)', 'delxCO2 (ppm)', 'xCO2 (ppm)', 'CO2 equiv. yr', 'eta (%)']
 _fmts = ['.2f', '.2f', '.2f', '.2f', '.0f', '.2f']
@@ -194,9 +225,6 @@ _traj_data = np.loadtxt('./pyTRACE/pyTRACE/data/CO2Trajectories.txt')
 _traj_years = _traj_data[:, 0]
 _traj_scenario_cols = {'none': 1, 'ssp119': 2, 'ssp126': 3, 'ssp245': 4, 'ssp370': 5,
                        'ssp370_lowNTCF': 6, 'ssp434': 7, 'ssp460': 8, 'ssp534_OS': 9, 'REMIND': 10}
-
-labels = ['None', 'SSP1-2.6', 'SSP2-4.5', 'SSP5-3.4 OS']
-scenarios = ['none', 'ssp126', 'ssp245', 'ssp534_OS']
 
 print(f'Total Ocean Changes Statistics {end_year}')
 print(_sep)
@@ -232,14 +260,6 @@ avg_eta /= len(scenarios)
 print(f'Average decrease in atmospheric CO2 by 2100 (not including "none" scenario):\t{avg_delxCO2:.2f} ppm')
 print(f'Average eta by 2100:\t{avg_eta:.2f} %')
 
-# %% convert Caserini et al. (2022) limestone reserves value to mol
-# https://doi.org/10.1029/2021GB007246
-limestone_Gt = 15000
-g_per_mol_limestone = 40.078 + 12.011 + 3*15.999
-# Gt -> metric ton -> grams -> moles -> Pmol
-limestone_Pmol = limestone_Gt * 1e9 * 1e6 / g_per_mol_limestone * 1e-15
-print(f'Nearshore-ish limestone reserves in Pmol:\t {limestone_Pmol}')
-
 
 #%% load data for pH calculations
 
@@ -264,7 +284,7 @@ longitude_flat = flatten(np.broadcast_to(longitude[np.newaxis, :, np.newaxis], o
 
 # make surface temperature array for calculation of pCO2
 abs_salinity = SA_from_SP(salinity, pressure, longitude_flat, latitude_flat)
-potential_temperature = pt0_from_t(abs_salinity, temperature, pressure) 
+potential_temperature = pt0_from_t(abs_salinity, temperature, pressure)
 
 #%% calculate pH (no OAE) on OCIM grid in 2050 and 2100 using SSP2-4.5
 
@@ -316,19 +336,19 @@ RC_2100_3d     = make_3d(RC_2100, ocnmask)
 omegaA_2100_3d = make_3d(omegaA_2100, ocnmask)
 pCO2_2100_3d   = make_3d(pCO2_2100, ocnmask)
 
-#%% calculate pH (max OAE) on OCIM grid in 2050 and 2100 using SSP2-4.5
+#%% calculate pH (clamp OAE) on OCIM grid in 2050 and 2100 using SSP2-4.5
 
 with xr.open_mfdataset(
         output_path + experiment_names[2] + '_*.nc',
         combine='by_coords',
         chunks={'time': 10},
         parallel=True) as ds:
-    
+
     CT_OAE_2050_3d = CT_preind_3d + Canth_2050_3d + ds['delCT'].sel(time=2050, method='nearest', tolerance=0.5).compute().values
     CT_OAE_2100_3d = CT_preind_3d + Canth_2100_3d + ds['delCT'].sel(time=2100, method='nearest', tolerance=0.5).compute().values
 
-    AT_OAE_2050_3d = AT_3d + ds['delAT'].sel(time=2050, method='nearest', tolerance=0.5).values
-    AT_OAE_2100_3d = AT_3d + ds['delAT'].sel(time=2100, method='nearest', tolerance=0.5).values
+    AT_OAE_2050_3d = AT_3d + ds['delAT'].sel(time=2050, method='nearest', tolerance=0.5).compute().values
+    AT_OAE_2100_3d = AT_3d + ds['delAT'].sel(time=2100, method='nearest', tolerance=0.5).compute().values
 
 # calculate pH assuming steady state alkalinity
 co2sys_OAE_2050         = pyco2.sys(dic=flatten(CT_OAE_2050_3d, ocnmask),
@@ -377,7 +397,41 @@ del_RC_2100_3d     = RC_OAE_2100_3d - RC_2100_3d
 del_omegaA_2100_3d = omegaA_OAE_2100_3d - omegaA_2100_3d
 del_pCO2_2100_3d   = pCO2_OAE_2100_3d - pCO2_2100_3d
 
-# %% figures: carbonate chemistry changes visualizations (SSP2-4.5, max OAE vs. no OAE)
+# load max_AT SSP2-4.5 snapshots to compute shared colorbar limits with max_AT_dataviz.py
+_max_AT_exp = 'max_AT_2026-07-30_long_ssp245'
+with xr.open_mfdataset(
+        output_path + _max_AT_exp + '_*.nc',
+        combine='by_coords',
+        chunks={'time': 10},
+        parallel=True) as _ds_ref:
+    _CT_ref_2050_3d = CT_preind_3d + Canth_2050_3d + _ds_ref['delCT'].sel(time=2050, method='nearest', tolerance=0.5).compute().values
+    _CT_ref_2100_3d = CT_preind_3d + Canth_2100_3d + _ds_ref['delCT'].sel(time=2100, method='nearest', tolerance=0.5).compute().values
+    _AT_ref_2050_3d = AT_3d + _ds_ref['delAT'].sel(time=2050, method='nearest', tolerance=0.5).compute().values
+    _AT_ref_2100_3d = AT_3d + _ds_ref['delAT'].sel(time=2100, method='nearest', tolerance=0.5).compute().values
+
+_co2sys_ref_2050      = pyco2.sys(dic=flatten(_CT_ref_2050_3d, ocnmask), alkalinity=flatten(_AT_ref_2050_3d, ocnmask),
+                                   salinity=salinity, temperature=temperature, pressure=pressure,
+                                   total_silicate=silicate, total_phosphate=phosphate)
+_co2sys_ref_2050_surf = pyco2.sys(dic=flatten(_CT_ref_2050_3d, ocnmask), alkalinity=flatten(_AT_ref_2050_3d, ocnmask),
+                                   salinity=salinity, temperature=potential_temperature, pressure=0,
+                                   total_silicate=silicate, total_phosphate=phosphate)
+_del_pH_ref_2050_3d     = make_3d(_co2sys_ref_2050['pH'], ocnmask) - pH_2050_3d
+_del_RC_ref_2050_3d     = make_3d(_co2sys_ref_2050['revelle_factor'], ocnmask) - RC_2050_3d
+_del_omegaA_ref_2050_3d = make_3d(_co2sys_ref_2050['saturation_aragonite'], ocnmask) - omegaA_2050_3d
+_del_pCO2_ref_2050_3d   = make_3d(_co2sys_ref_2050_surf['pCO2'], ocnmask) - pCO2_2050_3d
+
+_co2sys_ref_2100      = pyco2.sys(dic=flatten(_CT_ref_2100_3d, ocnmask), alkalinity=flatten(_AT_ref_2100_3d, ocnmask),
+                                   salinity=salinity, temperature=temperature, pressure=pressure,
+                                   total_silicate=silicate, total_phosphate=phosphate)
+_co2sys_ref_2100_surf = pyco2.sys(dic=flatten(_CT_ref_2100_3d, ocnmask), alkalinity=flatten(_AT_ref_2100_3d, ocnmask),
+                                   salinity=salinity, temperature=potential_temperature, pressure=0,
+                                   total_silicate=silicate, total_phosphate=phosphate)
+_del_pH_ref_2100_3d     = make_3d(_co2sys_ref_2100['pH'], ocnmask) - pH_2100_3d
+_del_RC_ref_2100_3d     = make_3d(_co2sys_ref_2100['revelle_factor'], ocnmask) - RC_2100_3d
+_del_omegaA_ref_2100_3d = make_3d(_co2sys_ref_2100['saturation_aragonite'], ocnmask) - omegaA_2100_3d
+_del_pCO2_ref_2100_3d   = make_3d(_co2sys_ref_2100_surf['pCO2'], ocnmask) - pCO2_2100_3d
+
+# %% figures: carbonate chemistry changes visualizations (SSP2-4.5, clamp OAE vs. no OAE)
 # rows: 2050 (top), 2100 (bottom)
 # cols: surface map | Pacific (209°E) | Atlantic (335°E) | Indian Ocean (91°E)
 
@@ -390,17 +444,21 @@ map_proj = ccrs.EqualEarth(central_longitude=200)
 
 # surface maps of change in pH, Revelle factor, Ω_A (3 rows × 2 cols)
 surface_vars = [
-    (r'$\mathrm{pH}$', del_pH_2050_3d[:, :, 0],     del_pH_2100_3d[:, :, 0]),
-    (r'$R_C$',       del_RC_2050_3d[:, :, 0],     del_RC_2100_3d[:, :, 0]),
-    (r'${\Omega_A}$',  del_omegaA_2050_3d[:, :, 0], del_omegaA_2100_3d[:, :, 0]),
+    (r'$\mathrm{pH}$', del_pH_2050_3d[:, :, 0],     del_pH_2100_3d[:, :, 0],
+                       _del_pH_ref_2050_3d[:, :, 0], _del_pH_ref_2100_3d[:, :, 0]),
+    (r'$R_C$',         del_RC_2050_3d[:, :, 0],     del_RC_2100_3d[:, :, 0],
+                       _del_RC_ref_2050_3d[:, :, 0], _del_RC_ref_2100_3d[:, :, 0]),
+    (r'${\Omega_A}$',  del_omegaA_2050_3d[:, :, 0], del_omegaA_2100_3d[:, :, 0],
+                       _del_omegaA_ref_2050_3d[:, :, 0], _del_omegaA_ref_2100_3d[:, :, 0]),
 ]
 
 fig3, axes3 = plt.subplots(3, 2, figsize=(12, 9), dpi=200,
                            subplot_kw={'projection': map_proj})
 
 im_list = []
-for row_idx, (var_label, data_2050, data_2100) in enumerate(surface_vars):
-    vmax_row = max(np.nanmax(np.abs(data_2050)), np.nanmax(np.abs(data_2100)))
+for row_idx, (var_label, data_2050, data_2100, ref_2050, ref_2100) in enumerate(surface_vars):
+    vmax_row = max(np.nanmax(np.abs(data_2050)), np.nanmax(np.abs(data_2100)),
+                   np.nanmax(np.abs(ref_2050)),  np.nanmax(np.abs(ref_2100)))
     for col_idx, (year, data) in enumerate([(2050, data_2050), (2100, data_2100)]):
         axes3[row_idx, col_idx].set_global()
         im = axes3[row_idx, col_idx].pcolormesh(longitude, latitude, data,
@@ -431,7 +489,7 @@ for row_idx, (im, var_label) in enumerate(im_list):
 sec_cmap = plt.cm.RdBu.copy()
 sec_cmap.set_bad('lightgray')
 
-# pCO2 interior sections (3 rows × 3 cols)
+# pCO2 interior sections (2 rows × 3 cols)
 fig2, sec_axes = plt.subplots(2, 3, figsize=(12, 7), dpi=200)
 
 sec_col_titles = ['Pacific', 'Atlantic', 'Indian Ocean']
@@ -446,7 +504,20 @@ del_pCO2_by_year = {
            del_pCO2_2100_3d[:, ind_idx, :]],
 }
 
-vmax = max(np.nanmax(np.abs(d)) for row in del_pCO2_by_year.values() for d in row)
+_del_pCO2_ref_by_year = {
+    2050: [_del_pCO2_ref_2050_3d[:, :, 0],
+           _del_pCO2_ref_2050_3d[:, pac_idx, :],
+           _del_pCO2_ref_2050_3d[:, atl_idx, :],
+           _del_pCO2_ref_2050_3d[:, ind_idx, :]],
+    2100: [_del_pCO2_ref_2100_3d[:, :, 0],
+           _del_pCO2_ref_2100_3d[:, pac_idx, :],
+           _del_pCO2_ref_2100_3d[:, atl_idx, :],
+           _del_pCO2_ref_2100_3d[:, ind_idx, :]],
+}
+vmax = max(
+    max(np.nanmax(np.abs(d)) for row in del_pCO2_by_year.values() for d in row),
+    max(np.nanmax(np.abs(d)) for row in _del_pCO2_ref_by_year.values() for d in row),
+)
 
 for row_idx, year in enumerate([2050, 2100]):
     for col_idx, (section, lat_lim, title) in enumerate(
@@ -481,8 +552,8 @@ _labels = ['pH', 'RC', 'omegaA', 'pCO2']
 _vars   = [del_pH_2100_3d, del_RC_2100_3d, del_omegaA_2100_3d, del_pCO2_2100_3d]
 
 for var, label in zip(_vars, _labels):
-    data    = flatten(var[:,:,0], ocnmask[:,:,0]), 
-    weights = flatten(cell_volume[:,:,0], ocnmask[:,:,0]), 
+    data    = flatten(var[:,:,0], ocnmask[:,:,0]),
+    weights = flatten(cell_volume[:,:,0], ocnmask[:,:,0]),
     print(f'Average change in surface ocean {label} (2100):\t{np.average(data, weights=weights):.2f}')
 
 # maximum surface and subsurface pCO2 changes
@@ -509,7 +580,7 @@ print(f'whole ocean preindustrial pH:\t{np.average(flatten(pH_preind_3d, ocnmask
 avg_surf_pH_preind = np.average(flatten(pH_preind_3d, mldmask), weights=flatten(cell_volume, mldmask))
 print(f'surface ocean mixed layer preindustrial pH:\t{avg_surf_pH_preind:.2f}')
 
-# weighted avg mixed layer pH under SSP2-4.5 max OAE over time
+# weighted avg mixed layer pH under SSP2-4.5 clamp OAE over time
 salinity_mld    = flatten(salinity_3d,    mldmask)
 temperature_mld = flatten(temperature_3d, mldmask)
 silicate_mld    = flatten(silicate_3d,    mldmask)
@@ -519,7 +590,7 @@ weights_mld     = flatten(cell_volume,    mldmask)
 CT_preind_mld   = flatten(CT_preind_3d,   mldmask)
 AT_mld          = flatten(AT_3d,          mldmask)
 
-surf_pH_cache_path = output_path + 'max_AT_surf_pH_cache.nc'
+surf_pH_cache_path = output_path + 'clamp_pH_surf_pH_cache.nc'
 
 if os.path.exists(surf_pH_cache_path):
     _surf_pH_cache = xr.open_dataset(surf_pH_cache_path).load()
@@ -559,7 +630,7 @@ else:
     print('Surface pH never recovers to within 5% of preindustrial within simulation')
 
 fig_surf_pH, ax_surf_pH = plt.subplots(figsize=(8, 4), dpi=200)
-ax_surf_pH.plot(time_surf_pH, avg_surf_pH_OAE_ts, label='SSP2-4.5 max OAE', c=colors[2])
+ax_surf_pH.plot(time_surf_pH, avg_surf_pH_OAE_ts, label='SSP2-4.5 clamp OAE', c=colors[2])
 ax_surf_pH.axhline(avg_surf_pH_preind, color=textcolor, ls='--', label='Preindustrial')
 if recovery_year is not None:
     ax_surf_pH.axvline(recovery_year, color='gray', ls=':', label=f'Within 5% (year {recovery_year:.0f})')
@@ -570,12 +641,18 @@ ax_surf_pH.legend(fontsize=_fs, frameon=False)
 ax_surf_pH.tick_params(labelsize=_fs)
 for side in ('top', 'bottom', 'left', 'right'):
     ax_surf_pH.spines[side].set_color(textcolor)
+
+_ref_surf_pH_cache = xr.open_dataset(output_path + 'max_AT_surf_pH_cache.nc').load()
+_ref_surf_pH_ts    = _ref_surf_pH_cache['avg_surf_pH_OAE'].values
+_all_surf_pH       = np.concatenate([avg_surf_pH_OAE_ts, _ref_surf_pH_ts, [avg_surf_pH_preind]])
+ax_surf_pH.set_ylim(*_ylim(_all_surf_pH))
+
 plt.tight_layout()
 
 # calculate
 avg_subsurf_pH_2100_OAE = np.average(flatten(pH_OAE_2100_3d, ocnmask.astype(bool) & ~mldmask.astype(bool)), weights=flatten(cell_volume, ocnmask.astype(bool) & ~mldmask.astype(bool)))
 avg_subsurf_pH_preind = np.average(flatten(pH_preind_3d, ocnmask.astype(bool) & ~mldmask.astype(bool)), weights=flatten(cell_volume, ocnmask.astype(bool) & ~mldmask.astype(bool)))
-print(f'subsurface pH in 2100 (SSP2-4.5 w/max OAE):\t{avg_subsurf_pH_2100_OAE:.2f}')
+print(f'subsurface pH in 2100 (SSP2-4.5 w/clamp OAE):\t{avg_subsurf_pH_2100_OAE:.2f}')
 print(f'subsurface preindustrial pH:\t{avg_subsurf_pH_preind:.2f}')
 print(f'preindustrial - 2100:\t{(avg_subsurf_pH_preind - avg_subsurf_pH_2100_OAE):.2f}')
 
@@ -600,8 +677,8 @@ for label, scenario in zip(labels, scenarios):
     print(f"{label:<{_lw2}}{float(delxCO2_2100):>{_vw2}.2f}{float(total_change):>{_vw2}.2f}")
 print(_sep2)
 
-# atmospheric CO2 levels at 2100 with max OAE
-print('Atmospheric CO2 at 2100 with max OAE')
+# atmospheric CO2 levels at 2100 with clamp OAE
+print('Atmospheric CO2 at 2100 with clamp OAE')
 for label, scenario in zip(labels[1:], scenarios[1:]):
     delxCO2_2100 = cache[f'delxCO2_{label}'].sel({f'time_{label}': 2100}, method='nearest', tolerance=0.5).values
     xCO2_2100    = delxCO2_2100 + get_co2_scenario(scenario, [2100])
@@ -612,7 +689,7 @@ delCT_2100 = cache['delCT_SSP2-4.5'].sel({'time_SSP2-4.5': 2100}, method='neares
 print(f'delCT at 2100 (SSP2-4.5):\t{delCT_2100 * 12.011 * 1e-15:.2f} PgC')
 
 # amount of CT accumulated as of 2022 (using TRACE)
-Canth_2022 = calculate_canth('none', 2022, temperature_3d, salinity_3d, ocnmask, latitude, longitude, depth) * cell_volume * rho * 1e-6 # mol 
+Canth_2022 = calculate_canth('none', 2022, temperature_3d, salinity_3d, ocnmask, latitude, longitude, depth) * cell_volume * rho * 1e-6  # mol
 print(f'Canth accumulated as of 2022:\t{np.nansum(Canth_2022) * 1e-15 * 12.011:.2e} PgC')
 
 #%%
