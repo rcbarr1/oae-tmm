@@ -264,6 +264,56 @@ def test_inpaint_nans_3d():
     return passed
 
 
+# ── grid.inpaint_nans edge cases ─────────────────────────────────────────────
+
+def test_inpaint_edge_cases():
+    print('\n--- inpaint_nans edge cases ---')
+    passed = True
+
+    # All-NaN 2D: emits UserWarning; result stays all-NaN.
+    arr_nan = np.full((4, 4), np.nan)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter('always')
+        result = inpaint_nans_2d(arr_nan, iterations=10)
+    passed &= _check(np.all(np.isnan(result)), 'all-NaN 2D input: result is all-NaN')
+    passed &= _check(any(issubclass(x.category, UserWarning) for x in w),
+                     'all-NaN 2D input: UserWarning raised')
+
+    arr_nan3 = np.full((3, 3, 3), np.nan)
+    with warnings.catch_warnings(record=True) as w3:
+        warnings.simplefilter('always')
+        result3 = inpaint_nans_3d(arr_nan3, iterations=10)
+    passed &= _check(np.all(np.isnan(result3)), 'all-NaN 3D input: result is all-NaN')
+    passed &= _check(any(issubclass(x.category, UserWarning) for x in w3),
+                     'all-NaN 3D input: UserWarning raised')
+
+    # iterations=0: emits UserWarning; NaN cells remain NaN; valid cells unchanged.
+    arr = np.array([[1., 2., np.nan],
+                    [4., np.nan, 6.],
+                    [np.nan, 8., 9.]])
+    with warnings.catch_warnings(record=True) as w0:
+        warnings.simplefilter('always')
+        result0 = inpaint_nans_2d(arr.copy(), iterations=0)
+    passed &= _check(any(issubclass(x.category, UserWarning) for x in w0),
+                     'iterations=0 2D: UserWarning raised')
+    passed &= _check(np.isnan(result0[0, 2]) and np.isnan(result0[1, 1]) and np.isnan(result0[2, 0]),
+                     'iterations=0: NaN cells remain NaN')
+    passed &= _check(result0[0, 0] == 1.0 and result0[2, 2] == 9.0,
+                     'iterations=0: valid cells unchanged')
+
+    # Single valid cell in a 2D field: fill propagates outward from the single valid
+    # cell; all NaNs reach 10.0 after enough iterations.
+    arr_single = np.full((5, 5), np.nan)
+    arr_single[2, 2] = 10.0
+    result_single = inpaint_nans_2d(arr_single, iterations=20)
+    passed &= _check(not np.any(np.isnan(result_single)),
+                     'single valid cell 2D: all NaNs filled after 20 iterations')
+    passed &= _check(np.allclose(result_single, 10.0),
+                     'single valid cell 2D: all values converge to 10.0')
+
+    return passed
+
+
 # ── chemistry.schmidt_number ─────────────────────────────────────────────────
 
 def test_schmidt_number():
@@ -381,10 +431,10 @@ def test_build_A_matrix():
     K0         = rng.random(m) * 1e-2 + 1e-3
     V          = rng.random(m) * 1e10 + 1e9
     z1         = 36.0
-
-    # --- Shape and CSR format ---
     k = rng.random(m) * 5.0
     f_ice = rng.random(m) * 0.3
+
+    # --- Shape and CSR format ---
     A = build_A_matrix(TR, k, f_ice, V, R_C, R_A, CT, AT, aqueous_CO2, K0, z1, rho, Patm, Ma)
     passed &= _check(A.shape == (2*m + 1, 2*m + 1),
                      f'A shape: expected ({2*m+1},{2*m+1}), got {A.shape}')
@@ -419,56 +469,6 @@ def test_build_A_matrix():
     # --- With nonzero k: A00 should be negative (xCO2' is damped by gas exchange) ---
     passed &= _check(A.toarray()[0, 0] < 0,
                      "nonzero k: A[0,0] is negative (xCO2' damped by air-sea exchange)")
-
-    return passed
-
-
-# ── grid.inpaint_nans edge cases ─────────────────────────────────────────────
-
-def test_inpaint_edge_cases():
-    print('\n--- inpaint_nans edge cases ---')
-    passed = True
-
-    # All-NaN 2D: emits UserWarning; result stays all-NaN.
-    arr_nan = np.full((4, 4), np.nan)
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter('always')
-        result = inpaint_nans_2d(arr_nan, iterations=10)
-    passed &= _check(np.all(np.isnan(result)), 'all-NaN 2D input: result is all-NaN')
-    passed &= _check(any(issubclass(x.category, UserWarning) for x in w),
-                     'all-NaN 2D input: UserWarning raised')
-
-    arr_nan3 = np.full((3, 3, 3), np.nan)
-    with warnings.catch_warnings(record=True) as w3:
-        warnings.simplefilter('always')
-        result3 = inpaint_nans_3d(arr_nan3, iterations=10)
-    passed &= _check(np.all(np.isnan(result3)), 'all-NaN 3D input: result is all-NaN')
-    passed &= _check(any(issubclass(x.category, UserWarning) for x in w3),
-                     'all-NaN 3D input: UserWarning raised')
-
-    # iterations=0: emits UserWarning; NaN cells remain NaN; valid cells unchanged.
-    arr = np.array([[1., 2., np.nan],
-                    [4., np.nan, 6.],
-                    [np.nan, 8., 9.]])
-    with warnings.catch_warnings(record=True) as w0:
-        warnings.simplefilter('always')
-        result0 = inpaint_nans_2d(arr.copy(), iterations=0)
-    passed &= _check(any(issubclass(x.category, UserWarning) for x in w0),
-                     'iterations=0 2D: UserWarning raised')
-    passed &= _check(np.isnan(result0[0, 2]) and np.isnan(result0[1, 1]) and np.isnan(result0[2, 0]),
-                     'iterations=0: NaN cells remain NaN')
-    passed &= _check(result0[0, 0] == 1.0 and result0[2, 2] == 9.0,
-                     'iterations=0: valid cells unchanged')
-
-    # Single valid cell in a 2D field: fill propagates outward from the single valid
-    # cell; all NaNs reach 10.0 after enough iterations.
-    arr_single = np.full((5, 5), np.nan)
-    arr_single[2, 2] = 10.0
-    result_single = inpaint_nans_2d(arr_single, iterations=20)
-    passed &= _check(not np.any(np.isnan(result_single)),
-                     'single valid cell 2D: all NaNs filled after 20 iterations')
-    passed &= _check(np.allclose(result_single, 10.0),
-                     'single valid cell 2D: all values converge to 10.0')
 
     return passed
 

@@ -4,7 +4,7 @@ Scientific invariant tests for oae_tmm.
 Tests physics that must hold regardless of grid resolution or experiment:
 
   1. Zero-forcing stability          — c=0, q=0 → c stays zero
-  2. CT mass conservation  (k=0)   — sum(CT'·V·ρ) = sum(q_CT'·V·ρ)·N·dt exactly
+  2. CT mass conservation  (k=0)     — sum(CT'·V·ρ) = sum(q_CT'·V·ρ)·N·dt exactly
   3. Total carbon conservation (k>0) — xCO2'·Ma + sum(CT'·V·ρ) = sum(q_CT·V·ρ)·N·dt
   4. AT mass conservation            — sum(AT'·V·ρ) = sum(q_AT'·V·ρ)·N·dt, for any k
   5. Linearity                       — frozen A: 2×q → 2×c; c(q1+q2) = c(q1)+c(q2)
@@ -12,17 +12,51 @@ Tests physics that must hold regardless of grid resolution or experiment:
 All tests use a small synthetic grid with a hand-constructed mass-conserving
 transport matrix — no data files required.
 
+Notation
+--------
+Scalars:
+  m    number of ocean cells
+  dt   timestep size [yr]
+  N    number of timesteps per test (N_steps)
+  ρ    seawater density [kg m⁻³]
+  Ma   total moles of atmosphere [µmol air]
+
+Vectors (length m):
+  V    cell volumes [m³], one entry per ocean cell
+  V^T  row vector (1×m) — transpose of column vector V
+
+State vector c (length 2m+1):
+  c = [ xCO2',  CT'_1 ... CT'_m,  AT'_1 ... AT'_m ]
+        c[0]    c[1:m+1]           c[m+1:]
+  All entries are perturbations from a reference state.
+
+Matrices:
+  TR   (m×m) transport matrix; moves tracer between ocean cells
+  A    (2m+1 × 2m+1) full system matrix (TR + air-sea exchange terms)
+
 Mathematical basis
 ------------------
-If V^T · TR = 0 (TR conserves mass with volumes V), then:
+Mass conservation condition: V^T · TR = 0, i.e. for every column j of TR,
+Σ_i V_i · TR_ij = 0. For the circular-chain transport used here all V_i are
+equal, so this reduces to every column summing to zero, which holds by
+construction.
 
-    [Ma, V·ρ·1_m,  0    ] · A = 0   (total carbon is neutral)
-    [0,  0,        V·ρ·1_m] · A = 0  (AT mass is neutral)
+Define weight vectors (length 2m+1):
+  w_C  = [Ma,  V_1·ρ, ..., V_m·ρ,  0, ...,      0]  (total carbon mass)
+  w_AT = [ 0,  0, ...,      0,  V_1·ρ, ..., V_m·ρ]  (AT mass)
 
-These follow from cancellation of gammax/gammaC terms and V^T·TR=0. For the
-implicit Euler step (I - dt·A)·c_{n+1} = c_n + dt·q, multiplying both sides
-by either weight vector gives exact conservation at every step, up to the
-tolerance of the linear solver.
+From V^T · TR = 0 and cancellation of air-sea coupling terms:
+  w_C  · A = 0   (total carbon is conserved by A)
+  w_AT · A = 0   (AT mass is conserved by A)
+
+Implicit Euler step: (I - dt·A)·c_n = c_{n-1} + dt·q
+
+Multiplying both sides by weight vector w (where w·A = 0):
+  w·c_n = w·c_{n-1} + dt·w·q
+
+So weighted mass increases by exactly dt·w·q each step. Summing N steps from
+c_0 = 0: w·c_N = N·dt·w·q — accumulated mass equals time-integrated source.
+Tests 2–4 verify this numerically; tolerance is set by the linear solver.
 
 Usage:
     python tests/invariant_test.py
