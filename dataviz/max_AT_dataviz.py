@@ -124,7 +124,7 @@ else:
 # c. change in ocean CT content
 # d. oae efficiency over time (delCT / delAT)
 
-fig, axes = plt.subplots(2, 2, figsize=(10, 6), dpi=200)
+fig, axes = plt.subplots(2, 2, figsize=(11, 7), dpi=200)
 
 pre_time = np.arange(plot_start, start_simulation, 1)
 pre_zeros = np.zeros(len(pre_time))
@@ -135,7 +135,7 @@ for label, legend_label, color in zip(labels, legend_labels, colors):
                     np.concatenate([pre_zeros, cache[f'AT_added_cum_{label}'].values * 1e-15]),
                     label=legend_label, c=color)
 axes[0][0].set_xlabel('Year', fontsize=_fs)
-axes[0][0].set_ylabel(r'Cumulative ${A_{\mathrm{T}}}$ Added (Pmol)', fontsize=_fs)
+axes[0][0].set_ylabel(r'Total ${A_{\mathrm{T}}}$ Added (Pmol)', fontsize=_fs)
 axes[0][0].set_xlim([plot_start, end_year])
 axes[0][0].legend(fontsize=_fs, frameon=False)
 for side in ('top', 'bottom', 'left', 'right'):
@@ -151,7 +151,7 @@ for label, legend_label, scenario, color in zip(labels, legend_labels, scenarios
     axes[0][1].plot(time, cache[f'delxCO2_{label}'].values + atmospheric_co2[len(pre_time):], label=legend_label, c=color)
     axes[0][1].plot(time_extended, atmospheric_co2, label=legend_label, ls=':', c=color)
 axes[0][1].set_xlabel('Year', fontsize=_fs)
-axes[0][1].set_ylabel(r'Atmospheric CO$_2$ (ppm)', fontsize=_fs)
+axes[0][1].set_ylabel(r'Atmospheric CO$_2$ (ppm)', fontsize=_fs, labelpad=10)
 axes[0][1].set_xlim([plot_start, end_year])
 for side in ('top', 'bottom', 'left', 'right'):
     axes[0][1].spines[side].set_color(textcolor)
@@ -165,7 +165,7 @@ for label, legend_label, color in zip(labels, legend_labels, colors):
                     np.concatenate([pre_zeros, cache[f'delCT_{label}'].values * 1e-15 * 12.011]),
                     label=legend_label, c=color)
 axes[1][0].set_xlabel('Year', fontsize=_fs)
-axes[1][0].set_ylabel(r'Change in $C_{\mathrm{T}}$ Content (PgC)', fontsize=_fs)
+axes[1][0].set_ylabel(r'Change in $C_{\mathrm{T}}$ Content (PgC)', fontsize=_fs, labelpad=10)
 axes[1][0].set_xlim([plot_start, end_year])
 for side in ('top', 'bottom', 'left', 'right'):
     axes[1][0].spines[side].set_color(textcolor)
@@ -188,6 +188,7 @@ axes[1][1].tick_params(labelsize=_fs)
 axes[1][1].text(0.02, 0.97, '(d)', transform=axes[1][1].transAxes,
                 fontsize=_fs, va='top', ha='left', color=textcolor)
 
+fig.align_ylabels(axes)
 plt.tight_layout()
 fig.savefig('./outputs/figure_3.png', dpi=300, bbox_inches='tight')
 
@@ -449,7 +450,7 @@ for row_idx, (var_label, data_2050, data_2100) in enumerate(surface_vars):
     im_list.append((im, var_label))
 
 plt.tight_layout()
-fig3.subplots_adjust(right=0.85, hspace=0.35)
+fig3.subplots_adjust(right=0.86, hspace=0)
 for row_idx, (im, var_label) in enumerate(im_list):
     ax_pos  = axes3[row_idx, 1].get_position()
     cbar_ax = fig3.add_axes([0.87, ax_pos.y0, 0.015, ax_pos.height])
@@ -485,7 +486,8 @@ for row_idx, year in enumerate([2050, 2100]):
         im = sec_axes[row_idx, col_idx].pcolormesh(latitude, depth, section.T,
                                                    cmap=sec_cmap, vmin=-vmax, vmax=vmax)
         sec_axes[row_idx, col_idx].set_xlabel('Latitude (°N)', fontsize=_fs)
-        sec_axes[row_idx, col_idx].set_ylabel('Depth (m)', fontsize=_fs)
+        if col_idx == 0:
+            sec_axes[row_idx, col_idx].set_ylabel('Depth (m)', fontsize=_fs)
         sec_axes[row_idx, col_idx].set_xlim(lat_lim[1], lat_lim[0])
         sec_axes[row_idx, col_idx].set_ylim(0, 2500)
         sec_axes[row_idx, col_idx].invert_yaxis()
@@ -496,9 +498,11 @@ for row_idx, year in enumerate([2050, 2100]):
         for side in ('top', 'bottom', 'left', 'right'):
             sec_axes[row_idx, col_idx].spines[side].set_color(textcolor)
         sec_axes[row_idx, col_idx].tick_params(labelsize=_fs)
+        if col_idx != 0:
+            sec_axes[row_idx, col_idx].tick_params(labelleft=False)
 
 plt.tight_layout()
-fig2.subplots_adjust(right=0.87)
+fig2.subplots_adjust(right=0.87, hspace=0.4)
 cbar_ax = fig2.add_axes([0.89, 0.1, 0.015, 0.8])
 cbar2   = fig2.colorbar(im, cax=cbar_ax)
 cbar2.set_label(r'Change in $p_{\mathrm{CO_2}}$ (µatm)', fontsize=_fs)

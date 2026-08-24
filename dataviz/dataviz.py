@@ -144,7 +144,7 @@ def load_glodap(data_path):
 
 
 def apply_style():
-    """Apply standard Calibri plot style with black text.
+    """Apply standard plot style with black text.
 
     Sets font family, weight, and all text/tick/label colors globally via
     matplotlib rcParams.
@@ -158,7 +158,7 @@ def apply_style():
     """
     textcolor  = '#000000'
     fontweight = 'normal'
-    mpl.rcParams['font.family']     = 'Calibri'
+    mpl.rcParams['font.family']     = 'DejaVu Sans'
     mpl.rcParams['font.weight']     = fontweight
     mpl.rcParams['text.color']      = textcolor
     mpl.rcParams['axes.labelcolor'] = textcolor

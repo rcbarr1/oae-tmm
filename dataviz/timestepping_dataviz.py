@@ -298,7 +298,7 @@ _ir_linestyles = {
 }
 
 fig, axes = plt.subplots(_n_rows, _n_cols,
-                         figsize=(2.6 * _n_cols, 2.6 * _n_rows),
+                         figsize=(3.2 * _n_cols, 3.2 * _n_rows),
                          dpi=200, squeeze=False)
 fig.subplots_adjust(bottom=0.08, hspace=0.18, wspace=0.18)
 

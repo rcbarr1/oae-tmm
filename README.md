@@ -124,17 +124,17 @@ docker run --rm \
     -v /path/to/zenodo_data:/app/data \
     -v /path/to/zenodo_data/outputs:/app/outputs \
     ghcr.io/rcbarr1/oae-tmm:v1.0.0 \
-    python dataviz/impulse_response_dataviz.py   # Figure 2
+    python -m dataviz.impulse_response_dataviz   # Figure 2
 docker run --rm \
     -v /path/to/zenodo_data:/app/data \
     -v /path/to/zenodo_data/outputs:/app/outputs \
     ghcr.io/rcbarr1/oae-tmm:v1.0.0 \
-    python dataviz/max_AT_dataviz.py             # Figures 3, 4, 5
+    python -m dataviz.max_AT_dataviz             # Figures 3, 4, 5
 docker run --rm \
     -v /path/to/zenodo_data:/app/data \
     -v /path/to/zenodo_data/outputs:/app/outputs \
     ghcr.io/rcbarr1/oae-tmm:v1.0.0 \
-    python dataviz/timestepping_dataviz.py       # Figures S1, S2, S3
+    python -m dataviz.timestepping_dataviz       # Figures S1, S2, S3
 ```
 
 ## Running experiments

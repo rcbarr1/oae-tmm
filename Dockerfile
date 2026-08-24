@@ -16,4 +16,10 @@ RUN pip install "numpy<2"
 
 RUN conda clean -afy
 
+# Pre-download Natural Earth shapefiles so dataviz runs without internet access
+RUN python -c "\
+import cartopy.io.shapereader as shp; \
+shp.natural_earth('110m', 'physical', 'land'); \
+shp.natural_earth('110m', 'physical', 'coastline')"
+
 ENV MPLBACKEND=Agg

@@ -204,7 +204,7 @@ map_proj = ccrs.EqualEarth(central_longitude=200)
 
 fig, axes = plt.subplots(
     3, 3,
-    figsize=(12, 4.5),
+    figsize=(13.8, 5.5),
     dpi=200,
     subplot_kw={'projection': map_proj},
 )
