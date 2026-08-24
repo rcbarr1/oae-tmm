@@ -19,3 +19,5 @@ Dockerfile
 .env
 *.asv
 *.slurm
+*.png
+*.sh

@@ -73,18 +73,23 @@ def _load_max_AT(name, label):
             AT_added.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
                     .cumsum(dim='time')
                     .rename({'time': time_dim})
+                    .assign_attrs(units='mol')
         )
-        exp_vars[f'delxCO2_{label}'] = ds['delxCO2'].rename({'time': time_dim})
+        exp_vars[f'delxCO2_{label}'] = (
+            ds['delxCO2'].rename({'time': time_dim}).assign_attrs(units='ppm')
+        )
 
         delCT = ds['delCT'] * cv * rho * 1e-6 # mol
         exp_vars[f'delCT_{label}'] = (
             delCT.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
                  .rename({'time': time_dim})
+                 .assign_attrs(units='mol')
         )
         delAT = ds['delAT'] * cv * rho * 1e-6 # mol
         exp_vars[f'delAT_{label}'] = (
             delAT.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
                  .rename({'time': time_dim})
+                 .assign_attrs(units='mol')
         )
     return exp_vars
 
@@ -145,6 +150,7 @@ fig.legend(_legend_handles, _legend_text,
            loc='lower center', ncol=4,
            fontsize=_fs, bbox_to_anchor=(0.5, -0.02),
            frameon=False)
+fig.savefig('./outputs/figure_s3.png', dpi=300, bbox_inches='tight')
 plt.show()
 
 _tbl_vars = [
@@ -184,14 +190,15 @@ ir_t_names = ['annually', 'monthly', 'dekadal', 'pentadal', 'daily']
 ir_labels  = ['Annual',   'Monthly', 'Dekadal', 'Pentadal', 'Daily']
 
 # Discover which cell numbers were run by globbing for the daily files
-ir_daily_files = sorted(glob.glob(ir_path + f'impulse_response_{ir_date}_daily_none_*_000.nc'))
-ir_cell_nums   = [int(Path(f).stem.split('_')[-2]) for f in ir_daily_files]
+# ir_daily_files = sorted(glob.glob(ir_path + f'impulse_response_{ir_date}_daily_none_*_000.nc'))
+# ir_cell_nums   = [int(Path(f).stem.split('_')[-2]) for f in ir_daily_files]
 
 #%% plot impulse_response: --test cell locations on OCIM grid
 surf_mask_2d  = ocnmask[:, :, 0]
 ocn_idxs_surf = np.argwhere(surf_mask_2d == 1)
 n             = len(ocn_idxs_surf)
 test_indices  = [758, 5291, 7965, 8810]
+ir_cell_nums = test_indices
 
 data_crs = ccrs.PlateCarree()
 map_proj = ccrs.EqualEarth(central_longitude=200)
@@ -210,6 +217,7 @@ ax.legend(fontsize=_fs, frameon=False, loc='lower center',
           bbox_to_anchor=(0.5, -0.01), ncol=len(test_indices),
           bbox_transform=fig.transFigure)
 plt.tight_layout()
+fig.savefig('./outputs/figure_s1.png', dpi=300, bbox_inches='tight')
 plt.show()
 
 #%% compute or load cached impulse_response time series
@@ -230,18 +238,23 @@ def _load_ir(t_name, label, cell_num):
             AT_added.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
                     .cumsum(dim='time')
                     .rename({'time': time_dim})
+                    .assign_attrs(units='mol')
         )
-        exp_vars[f'delxCO2_{label}_{cell_num}']  = ds['delxCO2'].rename({'time': time_dim})
+        exp_vars[f'delxCO2_{label}_{cell_num}'] = (
+            ds['delxCO2'].rename({'time': time_dim}).assign_attrs(units='ppm')
+        )
 
         delCT = ds['delCT'] * cv * rho * 1e-6 # mol
         exp_vars[f'delCT_{label}_{cell_num}'] = (
             delCT.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
                  .rename({'time': time_dim})
+                 .assign_attrs(units='mol')
         )
         delAT = ds['delAT'] * cv * rho * 1e-6 # mol
         exp_vars[f'delAT_{label}_{cell_num}'] = (
             delAT.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
                  .rename({'time': time_dim})
+                 .assign_attrs(units='mol')
         )
     return exp_vars
 
@@ -325,6 +338,7 @@ fig.legend(_ir_legend_handles, _ir_legend_text,
            loc='lower center', ncol=len(ir_labels),
            fontsize=_fs, bbox_to_anchor=(0.5, -0.02),
            frameon=False)
+fig.savefig('./outputs/figure_s2.png', dpi=300, bbox_inches='tight')
 plt.show()
 
 _col_w  = 12

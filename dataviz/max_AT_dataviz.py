@@ -179,6 +179,7 @@ axes[1][1].text(0.02, 0.97, '(d)', transform=axes[1][1].transAxes,
                 fontsize=_fs, va='top', ha='left', color=textcolor)
 
 plt.tight_layout()
+fig.savefig('./outputs/figure3.png', dpi=300, bbox_inches='tight')
 
 #%% statistics: ocean total changes
 
@@ -427,6 +428,7 @@ for row_idx, (im, var_label) in enumerate(im_list):
     cbar3.set_label(f'Change in {var_label}', fontsize=_fs)
     cbar3.ax.yaxis.label.set_color(textcolor)
     cbar3.ax.tick_params(colors=textcolor, labelsize=_fs)
+fig3.savefig('./outputs/figure4.png', dpi=300, bbox_inches='tight')
 
 sec_cmap = plt.cm.RdBu.copy()
 sec_cmap.set_bad('lightgray')
@@ -473,6 +475,7 @@ cbar2   = fig2.colorbar(im, cax=cbar_ax)
 cbar2.set_label(r'Change in $p_{\mathrm{CO_2}}$ (µatm)', fontsize=_fs)
 cbar2.ax.yaxis.label.set_color(textcolor)
 cbar2.ax.tick_params(colors=textcolor, labelsize=_fs)
+fig2.savefig('./outputs/figure5.png', dpi=300, bbox_inches='tight')
 
 #%% statistics: carbonate chemistry changes
 

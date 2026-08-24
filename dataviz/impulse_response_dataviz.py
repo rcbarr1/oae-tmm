@@ -254,6 +254,7 @@ cbar.set_ticks(np.linspace(_vmin, _vmax, 6))
 cbar.ax.yaxis.label.set_color(textcolor)
 cbar.ax.tick_params(colors=textcolor, labelsize=_fs)
 
+plt.savefig('./outputs/figure2.png', dpi=300, bbox_inches='tight')
 plt.show()
 
 #%%  statistics
