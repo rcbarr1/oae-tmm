@@ -23,7 +23,7 @@ from tqdm.dask import TqdmCallback
 
 data_path   = './data/'
 max_AT_path = './outputs/'
-ir_path     = './outputs/'   # impulse_response --test output; change if run elsewhere
+ir_path     = './outputs/'
 
 # Set to the tag dates used when the experiments were run
 max_AT_date = '2026-06-18'
@@ -39,7 +39,6 @@ rho = 1025  # seawater density [kg m-3]
 textcolor, fontweight = apply_style()
 _fs = 13
 _display = {'Dekadal': '10-Day', 'Pentadal': '5-Day'}
-
 
 # ============================================================================ #
 #%%  MAX AT TIMESTEPPING                                                        #
@@ -221,7 +220,7 @@ fig.savefig('./outputs/figure_s1.png', dpi=300, bbox_inches='tight')
 plt.show()
 
 #%% compute or load cached impulse_response time series
-ir_cache_path = ir_path + f'ir_timestepping_cache_{ir_date}.nc'
+ir_cache_path = ir_path + 'ir_timestepping_cache.nc'
 
 def _load_ir(t_name, label, cell_num):
     time_dim = f'time_{label}_{cell_num}'

@@ -22,7 +22,6 @@ from gsw import SA_from_SP, pt0_from_t
 
 # load model architecture
 data_path = './data/'
-#output_path = '/Volumes/LaCie/outputs/max_AT/'
 output_path = './outputs/'
 
 grid        = load_ocim_grid(data_path)
@@ -71,15 +70,26 @@ def _load_experiment(experiment_name, label):
             AT_added.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
                     .cumsum(dim='time')
                     .rename({'time': time_dim})
+                    .assign_attrs(units='mol')
         )
 
-        exp_vars[f'delxCO2_{label}'] = ds['delxCO2'].rename({'time': time_dim})
+        exp_vars[f'delxCO2_{label}'] = (
+            ds['delxCO2'].rename({'time': time_dim}).assign_attrs(units='ppm')
+        )
 
         delCT = ds['delCT'] * cell_volume_xr * rho * 1e-6
-        exp_vars[f'delCT_{label}'] = delCT.sum(dim=['latitude', 'longitude', 'depth'], skipna=True).rename({'time': time_dim})
+        exp_vars[f'delCT_{label}'] = (
+            delCT.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
+                 .rename({'time': time_dim})
+                 .assign_attrs(units='mol')
+        )
 
         delAT = ds['delAT'] * cell_volume_xr * rho * 1e-6
-        exp_vars[f'delAT_{label}'] = delAT.sum(dim=['latitude', 'longitude', 'depth'], skipna=True).rename({'time': time_dim})
+        exp_vars[f'delAT_{label}'] = (
+            delAT.sum(dim=['latitude', 'longitude', 'depth'], skipna=True)
+                 .rename({'time': time_dim})
+                 .assign_attrs(units='mol')
+        )
     return exp_vars
 
 _expected_end = float(np.arange(start_simulation, end_year, 1/360)[-1])
@@ -179,7 +189,7 @@ axes[1][1].text(0.02, 0.97, '(d)', transform=axes[1][1].transAxes,
                 fontsize=_fs, va='top', ha='left', color=textcolor)
 
 plt.tight_layout()
-fig.savefig('./outputs/figure3.png', dpi=300, bbox_inches='tight')
+fig.savefig('./outputs/figure_3.png', dpi=300, bbox_inches='tight')
 
 #%% statistics: ocean total changes
 
@@ -319,17 +329,36 @@ pCO2_2100_3d   = make_3d(pCO2_2100, ocnmask)
 
 #%% calculate pH (max OAE) on OCIM grid in 2050 and 2100 using SSP2-4.5
 
-with xr.open_mfdataset(
-        output_path + experiment_names[2] + '_*.nc',
-        combine='by_coords',
-        chunks={'time': 10},
-        parallel=True) as ds:
-    
-    CT_OAE_2050_3d = CT_preind_3d + Canth_2050_3d + ds['delCT'].sel(time=2050, method='nearest', tolerance=0.5).compute().values
-    CT_OAE_2100_3d = CT_preind_3d + Canth_2100_3d + ds['delCT'].sel(time=2100, method='nearest', tolerance=0.5).compute().values
+ssp245_snapshot_cache_path = output_path + 'max_AT_ssp245_snapshots_cache.nc'
 
-    AT_OAE_2050_3d = AT_3d + ds['delAT'].sel(time=2050, method='nearest', tolerance=0.5).values
-    AT_OAE_2100_3d = AT_3d + ds['delAT'].sel(time=2100, method='nearest', tolerance=0.5).values
+if os.path.exists(ssp245_snapshot_cache_path):
+    _snap = xr.open_dataset(ssp245_snapshot_cache_path).load()
+    delCT_2050 = _snap['delCT_2050'].values
+    delCT_2100 = _snap['delCT_2100'].values
+    delAT_2050 = _snap['delAT_2050'].values
+    delAT_2100 = _snap['delAT_2100'].values
+    _snap.close()
+else:
+    with xr.open_mfdataset(
+            output_path + experiment_names[2] + '_*.nc',
+            combine='by_coords',
+            chunks={'time': 10},
+            parallel=True) as ds:
+        delCT_2050 = ds['delCT'].sel(time=2050, method='nearest', tolerance=0.5).compute().values
+        delCT_2100 = ds['delCT'].sel(time=2100, method='nearest', tolerance=0.5).compute().values
+        delAT_2050 = ds['delAT'].sel(time=2050, method='nearest', tolerance=0.5).compute().values
+        delAT_2100 = ds['delAT'].sel(time=2100, method='nearest', tolerance=0.5).compute().values
+    xr.Dataset({
+        'delCT_2050': xr.DataArray(delCT_2050, dims=['latitude', 'longitude', 'depth'], attrs={'units': 'µmol kg-1'}),
+        'delCT_2100': xr.DataArray(delCT_2100, dims=['latitude', 'longitude', 'depth'], attrs={'units': 'µmol kg-1'}),
+        'delAT_2050': xr.DataArray(delAT_2050, dims=['latitude', 'longitude', 'depth'], attrs={'units': 'µmol kg-1'}),
+        'delAT_2100': xr.DataArray(delAT_2100, dims=['latitude', 'longitude', 'depth'], attrs={'units': 'µmol kg-1'}),
+    }, coords={'latitude': latitude, 'longitude': longitude, 'depth': depth}).to_netcdf(ssp245_snapshot_cache_path)
+
+CT_OAE_2050_3d = CT_preind_3d + Canth_2050_3d + delCT_2050
+CT_OAE_2100_3d = CT_preind_3d + Canth_2100_3d + delCT_2100
+AT_OAE_2050_3d = AT_3d + delAT_2050
+AT_OAE_2100_3d = AT_3d + delAT_2100
 
 # calculate pH assuming steady state alkalinity
 co2sys_OAE_2050         = pyco2.sys(dic=flatten(CT_OAE_2050_3d, ocnmask),
@@ -428,7 +457,7 @@ for row_idx, (im, var_label) in enumerate(im_list):
     cbar3.set_label(f'Change in {var_label}', fontsize=_fs)
     cbar3.ax.yaxis.label.set_color(textcolor)
     cbar3.ax.tick_params(colors=textcolor, labelsize=_fs)
-fig3.savefig('./outputs/figure4.png', dpi=300, bbox_inches='tight')
+fig3.savefig('./outputs/figure_4.png', dpi=300, bbox_inches='tight')
 
 sec_cmap = plt.cm.RdBu.copy()
 sec_cmap.set_bad('lightgray')
@@ -475,7 +504,7 @@ cbar2   = fig2.colorbar(im, cax=cbar_ax)
 cbar2.set_label(r'Change in $p_{\mathrm{CO_2}}$ (µatm)', fontsize=_fs)
 cbar2.ax.yaxis.label.set_color(textcolor)
 cbar2.ax.tick_params(colors=textcolor, labelsize=_fs)
-fig2.savefig('./outputs/figure5.png', dpi=300, bbox_inches='tight')
+fig2.savefig('./outputs/figure_5.png', dpi=300, bbox_inches='tight')
 
 #%% statistics: carbonate chemistry changes
 
@@ -549,7 +578,7 @@ else:
                                  salinity=salinity_mld, temperature=temperature_mld, pressure=pressure_mld,
                                  total_silicate=silicate_mld, total_phosphate=phosphate_mld)
             avg_surf_pH_OAE_ts[i] = np.average(co2sys_t['pH'], weights=weights_mld)
-    xr.Dataset({'avg_surf_pH_OAE': ('time', avg_surf_pH_OAE_ts)},
+    xr.Dataset({'avg_surf_pH_OAE': xr.DataArray(avg_surf_pH_OAE_ts, dims=['time'], attrs={'units': ''})},
                coords={'time': time_surf_pH}).to_netcdf(surf_pH_cache_path)
 
 within_5pct  = np.abs(avg_surf_pH_OAE_ts - avg_surf_pH_preind) / avg_surf_pH_preind < 0.05
@@ -560,20 +589,6 @@ if len(crossing_idx) > 0:
 else:
     recovery_year = None
     print('Surface pH never recovers to within 5% of preindustrial within simulation')
-
-fig_surf_pH, ax_surf_pH = plt.subplots(figsize=(8, 4), dpi=200)
-ax_surf_pH.plot(time_surf_pH, avg_surf_pH_OAE_ts, label='SSP2-4.5 max OAE', c=colors[2])
-ax_surf_pH.axhline(avg_surf_pH_preind, color=textcolor, ls='--', label='Preindustrial')
-if recovery_year is not None:
-    ax_surf_pH.axvline(recovery_year, color='gray', ls=':', label=f'Within 5% (year {recovery_year:.0f})')
-ax_surf_pH.set_xlabel('Year', fontsize=_fs)
-ax_surf_pH.set_ylabel('Avg Mixed Layer pH', fontsize=_fs)
-ax_surf_pH.set_xlim([time_surf_pH[0], time_surf_pH[-1]])
-ax_surf_pH.legend(fontsize=_fs, frameon=False)
-ax_surf_pH.tick_params(labelsize=_fs)
-for side in ('top', 'bottom', 'left', 'right'):
-    ax_surf_pH.spines[side].set_color(textcolor)
-plt.tight_layout()
 
 # calculate
 avg_subsurf_pH_2100_OAE = np.average(flatten(pH_OAE_2100_3d, ocnmask.astype(bool) & ~mldmask.astype(bool)), weights=flatten(cell_volume, ocnmask.astype(bool) & ~mldmask.astype(bool)))

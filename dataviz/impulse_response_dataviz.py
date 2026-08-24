@@ -28,7 +28,6 @@ from geopy.distance import geodesic
 from scipy.stats import pearsonr
 
 data_path = './data/'
-# ir_path   = '/Volumes/LaCie/outputs/impulse_response/'
 ir_path   = './outputs/'
 ir_date   = '2026-07-24'  # set to the tag date used when production runs were submitted
 
@@ -77,7 +76,7 @@ def is_valid(ds):
 
 #%% compute or load cached time series
 
-final_cache_path = ir_path + f'ir_efficiency_cache_{ir_date}.nc'
+final_cache_path = ir_path + f'ir_efficiency_cache.nc'
 
 
 def _npy_path(scenario, horizon):
@@ -254,7 +253,7 @@ cbar.set_ticks(np.linspace(_vmin, _vmax, 6))
 cbar.ax.yaxis.label.set_color(textcolor)
 cbar.ax.tick_params(colors=textcolor, labelsize=_fs)
 
-plt.savefig('./outputs/figure2.png', dpi=300, bbox_inches='tight')
+plt.savefig('./outputs/figure_2.png', dpi=300, bbox_inches='tight')
 plt.show()
 
 #%%  statistics
@@ -287,7 +286,7 @@ f_ice = xr.open_dataset(data_path + 'ncep_doe_reanalysis_ii/icec.nc')['icec'].tr
 icemask = flatten((f_ice <= 0.05).astype(int), ocnmask[:, :, 0])
 weights = flatten(cell_volume[:, :, 0], ocnmask[:, :, 0]) * 0 + 1
 
-print('Ice-Free OAE Efficiency Statistics (eta, %)')
+print('\nIce-Free OAE Efficiency Statistics (eta, %)')
 print(_sep)
 print(f"{'':>{_lw}}" + ''.join(f"{h:>{_vw}}" for h in _tbl_vars))
 for horizon, _ in _horizons:
@@ -308,17 +307,17 @@ print(_sep)
 
 # North Pacific example
 data = eta_cache[f'eta_15yr_ssp245'] 
-print(f"\neta at (49.5 ºN, 201 ºE): {data[70, 100] * 100:.2f}%")
-print(f"eta at (41.5 ºN, 201 ºE): {data[66, 100] * 100:.2f}%")
+print(f"\nEta at (49.5 ºN, 201 ºE): {data[70, 100] * 100:.2f}%")
+print(f"Eta at (41.5 ºN, 201 ºE): {data[66, 100] * 100:.2f}%")
 distance = geodesic((latitude[70], longitude[100]), (latitude[66], longitude[100])).km
-print(f'distance between these coords: {distance:.2f} (km)')
+print(f'Distance between these coords: {distance:.2f} (km)')
 
 # total anthropogenic C added to ocean (PgC)
 _lw  = 6
 _vw  = 12
 _sep = '=' * (_lw + _vw * len(_tbl_vars))
 
-print('Anthropogenic Carbon Statistics (PgC accumulated)')
+print('\nAnthropogenic Carbon Statistics (PgC accumulated)')
 print(_sep)
 print(f"{'':>{_lw}}" + ''.join(f"{s:>{_vw}}" for s in scenarios))
 
