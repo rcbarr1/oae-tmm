@@ -1,0 +1,11 @@
+data/
+examples/
+movies/
+notes/
+outputs/
+PyESPER/
+writing/
+.DS_Store
+.vscode
+*.slurm
+*.sh

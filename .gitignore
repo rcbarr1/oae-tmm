@@ -13,7 +13,6 @@ pyTRACE/
 __pycache__/
 *.egg-info/
 .DS_Store
-.dockerignore
 .vscode
 .env
 *.asv

@@ -47,6 +47,7 @@ data/
   NOAA_Extended_Reconstruction_SST_V5/
     sst.nc
   TRACE_gridded/
+    OCIM_CanthFromTRACECO2Pathway1.nc
     OCIM_CanthFromTRACECO2Pathway2.nc
     OCIM_CanthFromTRACECO2Pathway3.nc
     OCIM_CanthFromTRACECO2Pathway4.nc
@@ -63,7 +64,7 @@ data/
 ### 1. Clone the repository
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/rcbarr1/oae-tmm.git
 cd oae-tmm
 ```
 
@@ -161,7 +162,7 @@ python tests/invariant_test.py
 
 ## Published outputs
 
-Pre-computed model outputs are archived on Zenodo at https://doi.org/10.5281/zenodo.21829243. Available outputs include `max_AT` results across scenarios and time-step resolutions, and the `impulse_response` per-cell air-sea gas exchange efficiency maps. These can be downloaded directly for analysis without re-running the experiments. `impulse_response` in particular is computationally expensive, as it runs one simulation per surface ocean grid cell.
+Some pre-computed model outputs are archived on Zenodo at https://doi.org/10.5281/zenodo.21829243 for the timestepping, max AT, and impulse response experiments.
 
 ## Citation
 
