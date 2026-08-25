@@ -3,7 +3,7 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21829151.svg)](https://doi.org/10.5281/zenodo.21829151)
 [![Data DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21829243.svg)](https://doi.org/10.5281/zenodo.21829243)
 
-Ocean alkalinity enhancement (OAE) transport matrix model (TMM). Uses an implicit Euler solver with the OCIM2-48L transport matrix to simulate the global evolution of dissolved inorganic carbon ($C_\textrm{T}$) and total alkalinity ($A_\textrm{T}$) in response to alkalinity perturbations, with air-sea CO₂ exchange. Includes experiments for maximum-$A_\textrm{T}$ addition targeting preindustrial surface pH (`max_AT`) and per-cell impulse-response efficiency mapping (`impulse_response`).
+Ocean alkalinity enhancement (OAE) transport matrix model (TMM). Uses an implicit Euler solver with the OCIM2-48L transport matrix to simulate the global evolution of dissolved inorganic carbon ($C_\textrm{T}$) and total alkalinity ($A_\textrm{T}$) in response to alkalinity perturbations, with air-sea CO₂ exchange. Includes experiments for maximum $A_\textrm{T}$ addition targeting preindustrial surface pH (`max_AT`) and per-cell impulse-response efficiency mapping (`impulse_response`).
 
 ## Data sources
 
